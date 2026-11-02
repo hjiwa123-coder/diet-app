@@ -229,16 +229,34 @@ function r1(x){return Math.round(x*10)/10;}
 function sign(x){x=r1(x);return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1);}
 
 /* ---------- 저장 ---------- */
-var mem=null, demo=false;
+var VER='1.1',DB='four-week-meal-check';
+var IS_APP=window.__IS_APP||/github\.io$/.test(location.hostname);
+var mem=null, demo=false, lsOk=null, idbOk=null, lastSaved=null, persisted=null;
+function idb(mode,fn){return new Promise(function(res,rej){
+  var q;try{q=indexedDB.open(DB,1);}catch(e){rej(e);return;}
+  q.onupgradeneeded=function(){q.result.createObjectStore('kv');};
+  q.onerror=function(){rej(q.error);};q.onblocked=function(){rej(new Error('blocked'));};
+  q.onsuccess=function(){var d=q.result,t,out;
+    try{t=d.transaction('kv',mode);out=fn(t.objectStore('kv'));}catch(e){d.close();rej(e);return;}
+    t.oncomplete=function(){d.close();res(out&&out.result);};
+    t.onerror=t.onabort=function(){d.close();rej(t.error);};};
+});}
+function idbPut(j){var run=function(){return idb('readwrite',function(o){return o.put(j,'state');});};
+  return run().catch(run).then(function(){idbOk=true;showSave();},function(){idbOk=false;showSave();});}
+function idbGet(){return idb('readonly',function(o){return o.get('state');});}
+function clock(d){return pad(d.getHours())+':'+pad(d.getMinutes());}
+function saveFailed(){return lsOk===false&&idbOk===false;}
+function showSave(){var e=document.getElementById('saveStat');if(!e)return;e.textContent=saveFailed()?'저장에 실패했습니다. 안내 화면에서 백업하세요.':lastSaved?'기록 저장됨 '+clock(lastSaved):'';e.className=saveFailed()?'err':'small';}
 function blank(){return {v:1,start:nextMonday(today()),times:{first:'07:00',lunch:'12:00',snack:'15:30',dinner:'19:00'},modes:{},fastDays:{},leanDay:{},log:{},inbody:[],backupAt:null};}
 function load(){var raw=null;try{raw=localStorage.getItem(KEY);}catch(e){}
   if(!raw&&mem)raw=mem;
   if(raw){try{return Object.assign(blank(),JSON.parse(raw));}catch(e){}}
   return blank();}
 var S=load();
-function save(){if(demo)return;var j=JSON.stringify(S);mem=j;try{localStorage.setItem(KEY,j);}catch(e){}}
-save();
-try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
+function save(){if(demo)return;S.savedAt=Date.now();var j=JSON.stringify(S);mem=j;
+  try{localStorage.setItem(KEY,j);lsOk=true;}catch(e){lsOk=false;}
+  lastSaved=now();showSave();return idbPut(j);}
+function askPersist(){try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().then(function(v){persisted=v;});}catch(e){}}
 
 /* ---------- 프로그램 규칙 ---------- */
 function dayNum(s){return diff(s,S.start)+1;}
@@ -400,7 +418,7 @@ function renderToday(){
   if(demo)h+='<div class="banner"><strong>예시 데이터를 보고 있습니다</strong><span>여기서 누른 내용은 저장되지 않습니다.</span><button class="link" data-act="demoEnd">예시 끝내기</button></div>';
   if(!started&&!demo){
     var dd=diff(S.start,t);
-    h+='<section class="panel stack"><h2>'+dd+'일 뒤 시작합니다</h2><ul class="notes"><li>단백질 쉐이크를 준비하세요. 첫 주에만 24회 마십니다.</li><li>시작 전에 인바디를 측정해 입력하세요.</li><li>첫 3일은 두통과 집중력 저하가 올 수 있습니다. 큰 일정과 겹치지 않게 잡으세요.</li><li>당뇨약을 복용 중이면 처방 의사와 상의하기 전에는 단식하면 안 됩니다.</li></ul><button class="link" data-act="tab" data-v="guide">시작일과 식사 시간 바꾸기</button><button class="link" data-act="demo">예시로 둘러보기</button></section>';
+    h+='<section class="panel stack"><h2>'+dd+'일 뒤 시작합니다</h2><ul class="notes"><li>단백질 쉐이크를 준비하세요. 첫 주에만 24회 마십니다.</li><li>시작 전에 인바디를 측정해 입력하세요.</li><li>첫 3일은 두통과 집중력 저하가 올 수 있습니다. 큰 일정과 겹치지 않게 잡으세요.</li><li>당뇨약을 복용 중이면 처방 의사와 상의하기 전에는 단식하면 안 됩니다.</li></ul><button class="btn" data-act="startToday">오늘부터 시작하기</button><button class="link" data-act="tab" data-v="guide">시작일과 식사 시간 바꾸기</button>'+(IS_APP?'':'<button class="link" data-act="demo">예시로 둘러보기</button>')+'</section>';
   }
   h+=strip(v);
   if(!demo&&started&&S.backupAt!==undefined){var has=Object.keys(S.log).length||S.inbody.length;var old=S.backupAt?diff(t,S.backupAt.slice(0,10)):null;
@@ -416,6 +434,7 @@ function renderToday(){
   var nextK=null;
   if(v===t){var hhmm=pad(now().getHours())+':'+pad(now().getMinutes());
     for(var i=0;i<p.meals.length;i++){var mm=p.meals[i];if(!((l.meals||{})[mm.k]||{}).s&&mm.time.slice(0,5)>=hhmm.slice(0,2)+':00'){nextK=mm.k;break;}}}
+  if(ro)h+='<p class="small">아직 지나지 않은 날이라 기록할 수 없습니다. 미리보기입니다.</p>';
   h+='<section class="tl" aria-label="식사">';
   p.meals.forEach(function(m){
     var r=(l.meals||{})[m.k]||{},opts=[['plan','계획대로'],['diff','다르게 먹음'],['skip','안 먹음']];
@@ -427,11 +446,12 @@ function renderToday(){
     h+='</div></article>';
   });
   h+='</section>';
+  if(!ro)h+='<p class="small" id="saveStat" aria-live="polite"></p>';
   if(!ro)h+='<section class="panel stack"><label class="f" for="extra">계획 밖에 더 먹은 것</label><input type="text" id="extra" data-extra="1" value="'+esc(l.extra||'')+'" placeholder="두부 반 모, 견과류 한 줌"><label class="check"><input type="checkbox" id="banned" data-banned="1"'+(l.banned?' checked':'')+'>금기 식품을 먹었습니다</label></section>';
   if(p.notes.length)h+='<section class="panel"><ul class="notes">'+p.notes.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></section>';
   var early=p.m===1&&p.d<=3;
   h+='<details><summary>'+esc(MODE[p.m])+' 먹어도 되는 것</summary><div class="in"><div class="foods">'+foods(p.m,early).map(function(f){return '<div><span class="k">'+esc(f[0])+'</span><span>'+esc(f[1])+'</span></div>';}).join('')+'<div><span class="k">금기</span><span>'+BANNED+'</span></div></div></div></details>';
-  $app.innerHTML=h;
+  $app.innerHTML=h;showSave();
 }
 
 /* ---------- 일정 ---------- */
@@ -558,19 +578,23 @@ function saveInbody(form){
 
 /* ---------- 안내 ---------- */
 function renderGuide(){
-  var t=S.times,toM=function(x){var a=x.split(':');return +a[0]*60+ +a[1];},gap=(toM(t.first)+1440-toM(t.dinner))%1440,gh=r1(gap/60),h='<header class="top"><h1>안내</h1></header>';
+  var t=S.times,h='<header class="top"><h1>안내</h1></header>';
   var sec=function(title,body,open){return '<details'+(open?' open':'')+'><summary>'+esc(title)+'</summary><div class="in">'+body+'</div></details>';};
   var ul=function(a){return '<ul class="notes">'+a.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';};
   h+=sec('매일 지키는 5가지',ul(['공복: 14시간이 목표입니다. 처음에는 12시간도 괜찮습니다.','수면: 하루 최소 7시간.','금기 식품: '+BANNED+'.','운동: 주 2~3회 짧고 강한 인터벌 운동. 어려우면 걷기부터, 30분 이상 앉아 있지 않기.','수분: 하루 2L 이상.']),true);
   h+=sec('24시간 단식',ul(['전날 저녁 '+t.dinner+'에 마지막 식사를 하고, 다음 날 저녁 '+t.dinner+'에 첫 식사를 합니다.','단식 중에는 물, 카페인 없는 차, 영양제만 됩니다.','끝난 뒤 저녁을 거르지 말고 단백질을 충분히 드세요.','연속으로 하지 않습니다. 최소 하루 간격을 둡니다. 앱에서도 막아 둡니다.','처음에는 18~20시간에서 끝내도 됩니다.']));
   h+=sec('주차별 요약',['1주차: 1~3일 쉐이크 4회, 4~7일 점심 저탄수 식사와 쉐이크 3회.','2주차: 아침과 간식 쉐이크, 점심 저탄수 식사, 저녁 밥 없음. 단식 주 1회.','3주차: 2주차와 같고 저녁은 쉐이크로 대체 가능. 단식 주 2회.','4주차(선택): 점심 일반식, 저녁 탄수화물 제외. 단식 주 3회 권장, 주 2회도 가능.','유지기: 저탄수, 저당류, 고단백. 14시간 공복, 주 4회 이상 운동, 주 1회 단식. 금기 식품은 주 1~2회까지.'].map(function(x){return '<p class="sub">'+esc(x)+'</p>';}).join(''));
   h+=sec('몸에 나타날 수 있는 변화',ul(['두통, 무력감, 짜증, 집중력 저하: 탄수화물 금단 증상입니다. 보통 2~3일이면 사라지고, 계속되면 전문의와 상담하세요.','일어설 때 어지러움: 첫 주에 수분이 빠지며 생길 수 있습니다.','변비: 물을 더 마시고 유산균, 플레인 요거트를 활용하세요. 설사가 생기는 경우도 있습니다.','당뇨약을 복용 중이면 처방 의사와 상의하기 전에는 단식하면 안 됩니다. 혈압약 등 다른 약을 먹는다면 먼저 확인하세요.','4주가 지나 주 3회 단식을 이어가려면 전문가와 상담하세요.']));
-  h+='<section class="panel stack"><h2>시작일과 식사 시간</h2><div class="grid2"><label class="f" for="set-start" style="grid-column:1/-1">시작일<input type="date" id="set-start" data-set="start" value="'+esc(S.start)+'"></label><label class="f" for="set-first">아침<input type="time" id="set-first" data-time="first" value="'+t.first+'"></label><label class="f" for="set-lunch">점심<input type="time" id="set-lunch" data-time="lunch" value="'+t.lunch+'"></label><label class="f" for="set-snack">간식<input type="time" id="set-snack" data-time="snack" value="'+t.snack+'"></label><label class="f" for="set-dinner">저녁<input type="time" id="set-dinner" data-time="dinner" value="'+t.dinner+'"></label></div><p class="small">지금 시간표의 공복은 '+gh+'시간입니다. '+(gh>=14?'목표 14시간을 지키고 있습니다.':gh>=12?'시작 기준으로 충분합니다. 14시간을 지키려면 아침을 늦추거나 저녁을 당기세요.':'12시간부터 맞추는 것을 권장합니다.')+'</p></section>';
-  var bk=JSON.stringify(S);
+  h+='<section class="panel stack"><h2>시작일과 식사 시간</h2><div class="grid2"><label class="f" for="set-start" style="grid-column:1/-1">시작일<input type="date" id="set-start" data-set="start" value="'+esc(S.start)+'"></label><label class="f" for="set-first">아침<input type="time" id="set-first" data-time="first" value="'+t.first+'"></label><label class="f" for="set-lunch">점심<input type="time" id="set-lunch" data-time="lunch" value="'+t.lunch+'"></label><label class="f" for="set-snack">간식<input type="time" id="set-snack" data-time="snack" value="'+t.snack+'"></label><label class="f" for="set-dinner">저녁<input type="time" id="set-dinner" data-time="dinner" value="'+t.dinner+'"></label></div><p class="small" id="gapText">'+gapText()+'</p></section>';
+  var bk=JSON.stringify(S),good=function(x){return x===false?'문제 있음':x===true?'정상':'확인 전';};
+  h+='<section class="panel stack"><h2>저장 상태</h2><p class="sub">기기 저장: '+good(lsOk)+'<br>보조 저장: '+good(idbOk)+'<br>마지막 저장: '+(S.savedAt?esc(dShort(ymd(new Date(S.savedAt))))+' '+clock(new Date(S.savedAt)):'없음')+'<br>앱 버전: '+VER+'</p></section>';
   h+='<section class="panel stack"><h2>백업</h2><p class="sub">기록은 이 아이폰의 앱 안에만 저장됩니다. 앱을 지우면 함께 사라지니 메모 앱 등에 복사해 두세요.</p><p class="small">마지막 백업: '+(S.backupAt?esc(dShort(S.backupAt.slice(0,10))):'없음')+'</p><button class="btn" data-act="copy">백업 내용 복사</button><textarea id="bkOut" readonly aria-label="백업 내용">'+esc(bk)+'</textarea><label class="f" for="bkIn">복원할 내용 붙여넣기<textarea id="bkIn"></textarea></label><button class="btn ghost" data-act="restore">복원</button><p class="err" id="bkErr" hidden></p></section>';
   h+='<section class="stack"><button class="btn danger" data-act="reset">'+(armed==='reset'?'한 번 더 누르면 모든 기록 삭제':'모든 기록 지우기')+'</button><p class="small">박용우 교수의 다이어트 영상 스크립트와 공개 자료를 개인 체크용으로 정리했습니다. 공식 앱이 아닙니다. 밥 양과 음식 목록은 영상 화면의 표로 다시 확인이 필요합니다.</p></section>';
   $app.innerHTML=h;
 }
+
+function gapText(){var t=S.times,toM=function(x){var a=x.split(':');return +a[0]*60+ +a[1];},gh=r1(((toM(t.first)+1440-toM(t.dinner))%1440)/60);
+  return '지금 시간표의 공복은 '+gh+'시간입니다. '+(gh>=14?'목표 14시간을 지키고 있습니다.':gh>=12?'시작 기준으로 충분합니다. 14시간을 지키려면 아침을 늦추거나 저녁을 당기세요.':'12시간부터 맞추는 것을 권장합니다.');}
 
 /* ---------- 예시 ---------- */
 function loadDemo(){
@@ -617,6 +641,7 @@ document.addEventListener('click',function(e){
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(out.value).then(done,fb);else fb();}
   else if(a==='restore'){var inp=document.getElementById('bkIn').value.trim(),er=document.getElementById('bkErr');try{var d=JSON.parse(inp);if(!d||!d.start||!d.log)throw 0;S=Object.assign(blank(),d);demo=false;save();viewDate=null;render();toast('복원했습니다');}catch(x){er.textContent='복원하지 못했습니다. 백업 내용을 처음부터 끝까지 붙여넣었는지 확인하세요.';er.hidden=false;}}
   else if(a==='reset'){if(armed==='reset'){armed=null;demo=false;S=blank();save();viewDate=null;tab='today';render();toast('모든 기록을 지웠습니다');}else{armed='reset';render();}}
+  else if(a==='startToday'){S.start=today();viewDate=null;save();render();toast('오늘부터 시작합니다');}
   else if(a==='demo'){loadDemo();}
   else if(a==='demoEnd'){demo=false;S=load();viewDate=null;render();}
 });
@@ -624,20 +649,32 @@ document.addEventListener('input',function(e){
   var t=e.target,v=curView();
   if(t.dataset.note){var l=touch(v);l.meals=l.meals||{};var r=l.meals[t.dataset.note]||(l.meals[t.dataset.note]={});r.note=t.value;save();}
   else if(t.dataset.extra){touch(v).extra=t.value;save();}
+  else if(t.dataset.set==='start'&&t.value){S.start=t.value;viewDate=null;save();}
+  else if(t.dataset.time&&t.value){S.times[t.dataset.time]=t.value;save();var g=document.getElementById('gapText');if(g)g.textContent=gapText();}
 });
 document.addEventListener('change',function(e){
   var t=e.target;
   if(t.dataset.banned){touch(curView()).banned=t.checked;save();}
-  else if(t.dataset.set==='start'&&t.value){S.start=t.value;viewDate=null;save();toast('시작일을 바꿨습니다');}
-  else if(t.dataset.time&&t.value){S.times[t.dataset.time]=t.value;save();render();}
+  else if(t.dataset.set==='start'&&t.value){S.start=t.value;viewDate=null;save();toast('시작일을 저장했습니다');}
+  else if(t.dataset.time&&t.value){S.times[t.dataset.time]=t.value;save();var g=document.getElementById('gapText');if(g)g.textContent=gapText();}
 });
 document.addEventListener('submit',function(e){if(e.target.id==='ibf'){e.preventDefault();saveInbody(e.target);}});
 setInterval(function(){var b=document.getElementById('fbig'),i=document.getElementById('fbar');if(!b||!i)return;var c=fastClock(curView());b.textContent=c.done?'단식이 끝났습니다':c.left+' 남음';i.style.width=c.pct+'%';},30000);
-document.addEventListener('visibilitychange',function(){if(!document.hidden)render();});
+document.addEventListener('visibilitychange',function(){if(document.hidden){if(ready)save();}else if(ready)render();});
+window.addEventListener('pagehide',function(){if(ready)save();});
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
 
-window.__app={plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
-render();
+window.__app={ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
+var ready=false;
+function boot(){
+  var wait=new Promise(function(res){setTimeout(function(){res(undefined);},1000);});
+  Promise.race([idbGet().catch(function(){return undefined;}),wait]).then(function(j){
+    var d=null;try{d=j?JSON.parse(j):null;}catch(e){}
+    if(d&&d.start&&d.log&&(d.savedAt||0)>(S.savedAt||0)){S=Object.assign(blank(),d);try{localStorage.setItem(KEY,j);lsOk=true;}catch(e){lsOk=false;}mem=j;}
+    ready=true;var p=save();askPersist();render();return p;
+  });
+}
+boot();
 })();
 </script>
 
