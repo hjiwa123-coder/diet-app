@@ -1,0 +1,22 @@
+{
+ "name": "4주 식단 체크",
+ "short_name": "4주 식단",
+ "lang": "ko",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#E9EFEC",
+ "theme_color": "#123F38",
+ "icons": [
+  {
+   "src": "icon-180.png",
+   "sizes": "180x180",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}
