@@ -229,7 +229,7 @@ function r1(x){return Math.round(x*10)/10;}
 function sign(x){x=r1(x);return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1);}
 
 /* ---------- 저장 ---------- */
-var VER='1.1',DB='four-week-meal-check';
+var VER='1.2',DB='four-week-meal-check';
 var IS_APP=window.__IS_APP||/github\.io$/.test(location.hostname);
 var mem=null, demo=false, lsOk=null, idbOk=null, lastSaved=null, persisted=null;
 function idb(mode,fn){return new Promise(function(res,rej){
@@ -253,9 +253,9 @@ function load(){var raw=null;try{raw=localStorage.getItem(KEY);}catch(e){}
   if(raw){try{return Object.assign(blank(),JSON.parse(raw));}catch(e){}}
   return blank();}
 var S=load();
-function save(){if(demo)return;S.savedAt=Date.now();var j=JSON.stringify(S);mem=j;
+function save(quiet){if(demo)return;S.savedAt=Date.now();var j=JSON.stringify(S);mem=j;
   try{localStorage.setItem(KEY,j);lsOk=true;}catch(e){lsOk=false;}
-  lastSaved=now();showSave();return idbPut(j);}
+  if(!quiet)lastSaved=now();showSave();return idbPut(j);}
 function askPersist(){try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().then(function(v){persisted=v;});}catch(e){}}
 
 /* ---------- 프로그램 규칙 ---------- */
@@ -413,7 +413,7 @@ function fastClock(v){
   return {el:hm(el),left:hm(left),pct:pct,done:left<=0};
 }
 function renderToday(){
-  var t=today(),v=curView(),n=dayNum(v),p=plan(n),l=lg(v),ro=v>t,started=t>=S.start,h='';
+  var t=today(),v=curView(),n=dayNum(v),p=plan(n),l=lg(v),ro=false,future=v>t,started=t>=S.start,h='';
   h+='<header class="top"><p class="kicker">'+esc(kicker(p))+'</p><h1>'+esc(p.head)+'</h1><p class="sub">'+esc(dLabel(v))+(v===t?', 오늘':'')+'</p></header>';
   if(demo)h+='<div class="banner"><strong>예시 데이터를 보고 있습니다</strong><span>여기서 누른 내용은 저장되지 않습니다.</span><button class="link" data-act="demoEnd">예시 끝내기</button></div>';
   if(!started&&!demo){
@@ -434,7 +434,7 @@ function renderToday(){
   var nextK=null;
   if(v===t){var hhmm=pad(now().getHours())+':'+pad(now().getMinutes());
     for(var i=0;i<p.meals.length;i++){var mm=p.meals[i];if(!((l.meals||{})[mm.k]||{}).s&&mm.time.slice(0,5)>=hhmm.slice(0,2)+':00'){nextK=mm.k;break;}}}
-  if(ro)h+='<p class="small">아직 지나지 않은 날이라 기록할 수 없습니다. 미리보기입니다.</p>';
+  if(future)h+='<p class="small">아직 오지 않은 날입니다. 눌러 둔 내용도 저장됩니다.</p>';
   h+='<section class="tl" aria-label="식사">';
   p.meals.forEach(function(m){
     var r=(l.meals||{})[m.k]||{},opts=[['plan','계획대로'],['diff','다르게 먹음'],['skip','안 먹음']];
@@ -660,8 +660,8 @@ document.addEventListener('change',function(e){
 });
 document.addEventListener('submit',function(e){if(e.target.id==='ibf'){e.preventDefault();saveInbody(e.target);}});
 setInterval(function(){var b=document.getElementById('fbig'),i=document.getElementById('fbar');if(!b||!i)return;var c=fastClock(curView());b.textContent=c.done?'단식이 끝났습니다':c.left+' 남음';i.style.width=c.pct+'%';},30000);
-document.addEventListener('visibilitychange',function(){if(document.hidden){if(ready)save();}else if(ready)render();});
-window.addEventListener('pagehide',function(){if(ready)save();});
+document.addEventListener('visibilitychange',function(){if(document.hidden){if(ready)save(true);}else if(ready)render();});
+window.addEventListener('pagehide',function(){if(ready)save(true);});
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
 
 window.__app={ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
@@ -671,7 +671,7 @@ function boot(){
   Promise.race([idbGet().catch(function(){return undefined;}),wait]).then(function(j){
     var d=null;try{d=j?JSON.parse(j):null;}catch(e){}
     if(d&&d.start&&d.log&&(d.savedAt||0)>(S.savedAt||0)){S=Object.assign(blank(),d);try{localStorage.setItem(KEY,j);lsOk=true;}catch(e){lsOk=false;}mem=j;}
-    ready=true;var p=save();askPersist();render();return p;
+    ready=true;var p=save(true);askPersist();render();return p;
   });
 }
 boot();
