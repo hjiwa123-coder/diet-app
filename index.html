@@ -184,10 +184,35 @@ td:first-child button{font-weight:650;color:var(--accent);text-decoration:underl
 /* 시트, 탭, 토스트 */
 #sheetwrap{position:fixed;inset:0;background:rgba(10,25,21,.5);z-index:30;display:flex;align-items:flex-end;justify-content:center}
 #sheet{background:var(--bg);width:100%;max-width:520px;max-height:84%;overflow:auto;border-radius:18px 18px 0 0;padding:20px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:12px}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
 nav.tabs button{height:58px;font-size:15px;font-weight:650;color:var(--sub);position:relative}
 nav.tabs button[aria-current="page"]{color:var(--ink);font-weight:800}
 nav.tabs button[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:22%;right:22%;height:4px;background:var(--accent);border-radius:0 0 4px 4px}
+/* 사진 */
+.pics{display:flex;flex-wrap:wrap;gap:8px}
+.thumb{width:58px;height:58px;border-radius:10px;overflow:hidden;background:var(--soft);flex:none}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb.missing{border:1.5px dashed var(--line);background:none}
+.addpic{width:58px;height:58px;border:1.5px dashed var(--card-dim);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;position:relative;flex:none}
+.addpic svg{width:20px;height:20px}
+.addpic:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.addpic.busy{opacity:.5}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+.bigpic{width:100%;border-radius:12px;display:block;background:var(--soft);min-height:120px}
+/* 피드백 */
+.find{display:flex;flex-direction:column;gap:5px;padding:14px 0;border-bottom:1px solid var(--line)}
+.find:first-of-type{padding-top:4px}
+.find:last-child{border-bottom:0;padding-bottom:0}
+.find h3{font-size:17px;line-height:1.35}
+.find .badge{font-size:13px}
+.find.good .badge{color:var(--good)}.find.watch .badge{color:var(--watch)}.find.bad .badge{color:var(--bad)}
+.find .fix{font-size:15px;background:var(--bg);border-radius:10px;padding:10px 12px;line-height:1.45}
+.find .fix b{display:block;font-size:13px;color:var(--sub);margin-bottom:2px}
+.gallery{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.gallery figure{margin:0;display:flex;flex-direction:column;gap:2px;min-width:0}
+.gallery .thumb{width:100%;height:auto;aspect-ratio:1;max-width:100%}
+.gallery figcaption{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:15px}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:15px;font-weight:600;z-index:40;max-width:88%;text-align:center}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .4s}}
 </style>
@@ -196,6 +221,7 @@ nav.tabs button[aria-current="page"]::before{content:"";position:absolute;top:-1
 <nav class="tabs" aria-label="화면">
   <button data-act="tab" data-v="today">오늘</button>
   <button data-act="tab" data-v="plan">일정</button>
+  <button data-act="tab" data-v="feedback">피드백</button>
   <button data-act="tab" data-v="inbody">인바디</button>
   <button data-act="tab" data-v="guide">안내</button>
 </nav>
@@ -229,17 +255,45 @@ function r1(x){return Math.round(x*10)/10;}
 function sign(x){x=r1(x);return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1);}
 
 /* ---------- 저장 ---------- */
-var VER='1.2',DB='four-week-meal-check';
+var VER='1.4',DB='four-week-meal-check';
 var IS_APP=window.__IS_APP||/github\.io$/.test(location.hostname);
 var mem=null, demo=false, lsOk=null, idbOk=null, lastSaved=null, persisted=null;
-function idb(mode,fn){return new Promise(function(res,rej){
-  var q;try{q=indexedDB.open(DB,1);}catch(e){rej(e);return;}
-  q.onupgradeneeded=function(){q.result.createObjectStore('kv');};
+function idbS(store,mode,fn){return new Promise(function(res,rej){
+  var q;try{q=indexedDB.open(DB,2);}catch(e){rej(e);return;}
+  q.onupgradeneeded=function(){var d=q.result;if(!d.objectStoreNames.contains('kv'))d.createObjectStore('kv');if(!d.objectStoreNames.contains('photos'))d.createObjectStore('photos');};
   q.onerror=function(){rej(q.error);};q.onblocked=function(){rej(new Error('blocked'));};
   q.onsuccess=function(){var d=q.result,t,out;
-    try{t=d.transaction('kv',mode);out=fn(t.objectStore('kv'));}catch(e){d.close();rej(e);return;}
+    try{t=d.transaction(store,mode);out=fn(t.objectStore(store));}catch(e){d.close();rej(e);return;}
     t.oncomplete=function(){d.close();res(out&&out.result);};
     t.onerror=t.onabort=function(){d.close();rej(t.error);};};
+});}
+function idb(mode,fn){return idbS('kv',mode,fn);}
+function picPut(id,v){return idbS('photos','readwrite',function(o){return o.put(v,id);});}
+function picGet(id){return idbS('photos','readonly',function(o){return o.get(id);});}
+function picDel(id){return idbS('photos','readwrite',function(o){return o.delete(id);});}
+function picClear(){return idbS('photos','readwrite',function(o){return o.clear();});}
+var PIC={},PICMISS={};
+function picURL(id){
+  if(PIC[id])return Promise.resolve(PIC[id]);
+  if(PICMISS[id])return Promise.resolve(null);
+  return picGet(id).then(function(v){if(!v){PICMISS[id]=1;return null;}PIC[id]=URL.createObjectURL(new Blob([v.buf],{type:v.type||'image/jpeg'}));return PIC[id];},function(){return null;});
+}
+function hydrate(){
+  document.querySelectorAll('img[data-pid]').forEach(function(im){
+    if(im.getAttribute('src'))return;var id=im.dataset.pid;
+    picURL(id).then(function(u){if(u)im.src=u;else{var b=im.closest('.thumb');if(b)b.classList.add('missing');im.alt='사진 없음';}});
+  });
+}
+function shrink(file){return new Promise(function(res,rej){
+  var url=URL.createObjectURL(file),img=new Image();
+  img.onload=function(){
+    var M=1280,w=img.naturalWidth,h=img.naturalHeight,sc=Math.min(1,M/Math.max(w,h)),c=document.createElement('canvas');
+    c.width=Math.max(1,Math.round(w*sc));c.height=Math.max(1,Math.round(h*sc));
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+    c.toBlob(function(b){if(!b){rej(new Error('blob'));return;}b.arrayBuffer().then(function(buf){res({buf:buf,type:'image/jpeg'});},rej);},'image/jpeg',0.72);
+  };
+  img.onerror=function(){URL.revokeObjectURL(url);rej(new Error('img'));};
+  img.src=url;
 });}
 function idbPut(j){var run=function(){return idb('readwrite',function(o){return o.put(j,'state');});};
   return run().catch(run).then(function(){idbOk=true;showSave();},function(){idbOk=false;showSave();});}
@@ -415,6 +469,7 @@ function fastClock(v){
 function renderToday(){
   var t=today(),v=curView(),n=dayNum(v),p=plan(n),l=lg(v),ro=false,future=v>t,started=t>=S.start,h='';
   h+='<header class="top"><p class="kicker">'+esc(kicker(p))+'</p><h1>'+esc(p.head)+'</h1><p class="sub">'+esc(dLabel(v))+(v===t?', 오늘':'')+'</p></header>';
+  if(!IS_APP)h+='<div class="banner"><strong>이 화면은 미리보기입니다</strong><span>앱을 닫으면 기록이 사라집니다. 실제 앱은 Safari에서 아래 주소를 열어 홈 화면에 추가하세요.</span><span>hjiwa123-coder.github.io/diet-app/</span></div>';
   if(demo)h+='<div class="banner"><strong>예시 데이터를 보고 있습니다</strong><span>여기서 누른 내용은 저장되지 않습니다.</span><button class="link" data-act="demoEnd">예시 끝내기</button></div>';
   if(!started&&!demo){
     var dd=diff(S.start,t);
@@ -443,15 +498,175 @@ function renderToday(){
     h+='<article class="meal'+(nextK===m.k?' next':'')+'"><time>'+esc(m.time)+'</time><div class="body"><div><h3>'+esc(m.name)+'</h3><p class="desc">'+esc(m.text)+(m.sub?'<br>'+esc(m.sub):'')+'</p></div>'+seg({a:'meal',k:m.k},opts,r.s,ro);
     if(showNote&&!ro)h+='<input type="text" id="note-'+m.k+'" data-note="'+m.k+'" value="'+esc(r.note||'')+'" placeholder="먹은 것 적기" aria-label="'+esc(m.name)+' 먹은 것">';
     else if(r.note)h+='<p class="desc">'+esc(r.note)+'</p>';
+    h+=picRow(v,m.k,m.name);
     h+='</div></article>';
   });
   h+='</section>';
   if(!ro)h+='<p class="small" id="saveStat" aria-live="polite"></p>';
-  if(!ro)h+='<section class="panel stack"><label class="f" for="extra">계획 밖에 더 먹은 것</label><input type="text" id="extra" data-extra="1" value="'+esc(l.extra||'')+'" placeholder="두부 반 모, 견과류 한 줌"><label class="check"><input type="checkbox" id="banned" data-banned="1"'+(l.banned?' checked':'')+'>금기 식품을 먹었습니다</label></section>';
+  if(!ro)h+='<section class="panel stack"><label class="f" for="extra">계획 밖에 더 먹은 것</label><input type="text" id="extra" data-extra="1" value="'+esc(l.extra||'')+'" placeholder="두부 반 모, 견과류 한 줌">'+picRow(v,'extra','더 먹은 것')+'<label class="check"><input type="checkbox" id="banned" data-banned="1"'+(l.banned?' checked':'')+'>금기 식품을 먹었습니다</label></section>';
   if(p.notes.length)h+='<section class="panel"><ul class="notes">'+p.notes.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></section>';
   var early=p.m===1&&p.d<=3;
   h+='<details><summary>'+esc(MODE[p.m])+' 먹어도 되는 것</summary><div class="in"><div class="foods">'+foods(p.m,early).map(function(f){return '<div><span class="k">'+esc(f[0])+'</span><span>'+esc(f[1])+'</span></div>';}).join('')+'<div><span class="k">금기</span><span>'+BANNED+'</span></div></div></div></details>';
   $app.innerHTML=h;showSave();
+}
+
+var CAM='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 015.5 7h2l1.4-2h6.2l1.4 2h2A1.5 1.5 0 0120 8.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+var SLOT={breakfast:'아침',lunch:'점심',snack:'간식',dinner:'저녁',extra:'더 먹은 것'};
+function picsOf(v,k){return (lg(v).pics||[]).filter(function(p){return k==null||p.k===k;});}
+function picRow(v,k,label){
+  var ps=picsOf(v,k),h='<div class="pics">';
+  ps.forEach(function(p){h+='<button class="thumb" data-act="pic" data-v="'+esc(p.id)+'" aria-label="'+esc(label)+' 사진 크게 보기"><img data-pid="'+esc(p.id)+'" alt="'+esc(label)+' 사진"></button>';});
+  h+='<label class="addpic" id="add-'+k+'">'+CAM+'<span>사진</span><input type="file" accept="image/*" class="vh" id="file-'+k+'" data-pic="'+k+'" aria-label="'+esc(label)+' 사진 추가"></label></div>';
+  return h;
+}
+function addPhoto(v,k,file){
+  if(demo){toast('예시에서는 사진을 저장하지 않습니다');return;}
+  var lab=document.getElementById('add-'+k);if(lab)lab.classList.add('busy');
+  shrink(file).then(function(img){
+    var id=v+'-'+k+'-'+Date.now();
+    return picPut(id,img).then(function(){var l=touch(v);l.pics=l.pics||[];l.pics.push({id:id,k:k});save();render();toast('사진을 저장했습니다');});
+  }).catch(function(){if(lab)lab.classList.remove('busy');toast('사진을 저장하지 못했습니다. 다시 시도하세요.');});
+}
+function findPic(id){for(var d in S.log){var ps=S.log[d].pics||[];for(var i=0;i<ps.length;i++)if(ps[i].id===id)return {date:d,p:ps[i]};}return null;}
+function openPic(id){
+  var f=findPic(id);if(!f)return;
+  var h='<h2>'+esc(dShort(f.date)+' '+(SLOT[f.p.k]||''))+'</h2><img class="bigpic" data-pid="'+esc(id)+'" alt="식단 사진">';
+  h+='<button class="btn danger" data-act="picDel" data-v="'+esc(id)+'">'+(armed==='pic'+id?'한 번 더 누르면 삭제':'사진 삭제')+'</button><button class="btn ghost" data-act="close">닫기</button>';
+  document.getElementById('sheet').innerHTML=h;document.getElementById('sheetwrap').hidden=false;hydrate();
+}
+
+/* ---------- 피드백 ---------- */
+var BAN_RE=/(라면|국수|파스타|스파게티|짜장|짬뽕|우동|냉면|칼국수|수제비|빵|토스트|샌드위치|햄버거|피자|떡|튀김|치킨|돈가스|돈까스|탕수육|과일|사과|귤|포도|딸기|수박|참외|망고|주스|맥주|소주|와인|막걸리|술|케이크|케익|과자|쿠키|아이스크림|초콜릿|콜라|사이다|탄산음료|믹스커피|시리얼)/g;
+var CARB_RE=/(밥|면|빵|국수|떡|고구마|감자|죽)/;
+var fbRange='7',shareFiles=[];
+function fbWindow(){
+  var t=today(),tn=dayNum(t);if(tn<1)return null;
+  var first=fbRange==='7'?Math.max(1,tn-6):1;
+  return {first:first,last:tn,from:dateOf(first),to:t};
+}
+function analyze(){
+  var win=fbWindow();if(!win)return null;
+  var t=today(),A={days:0,unlogged:[],slots:0,ok:0,diff:0,skip:0,none:0,shakeSkip:[],shakeMiss:{},mealSkip:[],fastDinSkip:[],fastPlan:0,fastDone:0,fastShort:0,fastSkip:[],fastNone:[],banned:[],words:[],dinCarb:[],diffBare:0,pics:0,win:win};
+  for(var n=win.first;n<=win.last;n++){
+    var s=dateOf(n),p=plan(n),l=lg(s),st=dayStatus(n),isT=s===t;
+    if(isT&&!st.any)continue;
+    A.days++;if(!st.any)A.unlogged.push(s);
+    A.pics+=(l.pics||[]).length;
+    p.meals.forEach(function(m){
+      var r=(l.meals||{})[m.k]||{},hasPic=picsOf(s,m.k).length>0;
+      if(isT&&!r.s)return;
+      A.slots++;
+      if(r.s==='plan'||r.s==='alt')A.ok++;else if(r.s==='diff')A.diff++;else if(r.s==='skip')A.skip++;else A.none++;
+      if(m.kind==='shake'&&(r.s==='skip'||r.s==='diff')){A.shakeSkip.push(s);A.shakeMiss[m.name]=(A.shakeMiss[m.name]||0)+1;}
+      if(r.s==='skip'&&m.kind==='meal'){if(p.fast&&m.k==='dinner')A.fastDinSkip.push(s);else A.mealSkip.push(dShort(s)+' '+m.name);}
+      if(r.s==='diff'&&!r.note&&!hasPic)A.diffBare++;
+      if(m.k==='dinner'&&p.m>=2&&p.m<=4&&!p.fast&&r.note&&CARB_RE.test(r.note.replace(/밥\s*없이/g,'')))A.dinCarb.push(dShort(s)+' '+r.note);
+    });
+    if(p.fast){A.fastPlan++;if(l.fast==='done')A.fastDone++;else if(l.fast==='short')A.fastShort++;else if(l.fast==='skip')A.fastSkip.push(s);else if(!isT)A.fastNone.push(s);}
+    if(l.banned)A.banned.push(s);
+    var txt=[l.extra||''].concat(Object.keys(l.meals||{}).map(function(k){return (l.meals[k]||{}).note||'';})).join(' '),mt=txt.match(BAN_RE);
+    if(mt&&!l.banned)A.words.push(dShort(s)+': '+mt.filter(function(x,i){return mt.indexOf(x)===i;}).join(', '));
+  }
+  A.logSlots=A.slots-A.none;A.pct=A.logSlots?Math.round(A.ok/A.logSlots*100):null;
+  var F=[],add=function(lvl,title,detail,fix,rank){F.push({lvl:lvl,title:title,detail:detail,fix:fix,rank:rank});};
+  if(A.fastDinSkip.length)add('bad','단식 뒤 저녁을 거른 날이 있습니다',A.fastDinSkip.map(dShort).join(', ')+'. 영상에서는 단식이 끝난 뒤 저녁이 가장 중요하다고 합니다. 이 끼니를 거르면 근육이 빠지기 쉽습니다.','배가 고프지 않아도 단식 뒤 저녁은 단백질 위주로 충분히 드세요. 두부, 달걀, 생선, 살코기에 채소를 곁들이면 됩니다.',1);
+  if(A.shakeSkip.length){
+    var worst=Object.keys(A.shakeMiss).sort(function(a,b){return A.shakeMiss[b]-A.shakeMiss[a];})[0];
+    add(A.shakeSkip.length>=3?'bad':'watch','단백질 쉐이크를 '+A.shakeSkip.length+'번 거르거나 바꿨습니다','가장 자주 놓친 때는 '+worst+'('+A.shakeMiss[worst]+'번)입니다. 일정한 간격으로 단백질을 넣는 것이 근육을 지키는 핵심입니다.',worst+' 쉐이크를 가방이나 사무실에 미리 두세요. 못 마셨다면 굶지 말고 두부, 달걀, 플레인 요거트로 단백질을 채우세요.',2);
+  }
+  if(A.mealSkip.length)add('watch','계획한 식사를 거른 적이 있습니다',A.mealSkip.join(', ')+'. 영상에서는 배고픔을 참으면 몸이 적응해 오히려 지방이 덜 빠진다고 합니다.','양을 줄이더라도 단백질과 채소는 꼭 드세요. 시간이 없으면 쉐이크로 대신해도 됩니다.',3);
+  if(A.banned.length)add(A.banned.length>=2?'bad':'watch','금기 식품을 먹은 날이 '+A.banned.length+'일 있습니다',A.banned.map(dShort).join(', ')+'. 과일, 밀가루, 떡, 튀김, 술은 혈당을 빠르게 올려 지방을 쓰는 몸으로 바뀌는 것을 늦춥니다.','다음 끼니부터 계획대로 돌아가면 됩니다. 굶어서 만회하지 마세요. 그날 짧고 강한 인터벌 운동을 하면 도움이 됩니다.',4);
+  if(A.words.length)add('watch','메모에 금기 식품으로 보이는 단어가 있습니다',A.words.join(' / ')+'. 금기 식품 표시는 하지 않은 날입니다.','실제로 먹었다면 그날 화면에서 금기 식품을 체크해 기록을 정확히 남기세요. 3주차부터는 운동량이 많은 날 고구마, 바나나, 단호박, 밤을 소량 먹을 수 있습니다.',5);
+  if(A.dinCarb.length)add('watch','저녁에 탄수화물을 드신 것 같습니다',A.dinCarb.join(' / ')+'. 2주차부터 4주차까지 저녁은 밥 없이 단백질과 채소로 먹습니다.','저녁에 배가 고프면 밥 대신 두부, 달걀, 채소를 늘리세요. 3주차라면 저녁을 쉐이크로 바꿔도 됩니다.',6);
+  var fm=A.fastSkip.length+A.fastNone.length;
+  if(A.fastPlan&&fm)add('watch','단식 '+A.fastPlan+'번 중 '+fm+'번을 하지 못했거나 기록하지 않았습니다',A.fastSkip.concat(A.fastNone).map(dShort).join(', ')+'.','바쁜 날과 겹치면 일정 화면에서 단식일을 옮기세요. 처음에는 18~20시간에서 끝내도 됩니다. 연속으로 하지는 마세요.',7);
+  if(A.unlogged.length)add('watch','기록이 없는 날이 '+A.unlogged.length+'일 있습니다',A.unlogged.map(dShort).join(', ')+'. 기록이 비어 있으면 인바디 결과가 나빠도 원인을 찾기 어렵습니다.','하루를 마칠 때 한 번에 체크해도 됩니다. 못 지킨 날일수록 기록해 두세요.',8);
+  if(A.diffBare>=2)add('watch','다르게 먹은 끼니 '+A.diffBare+'개에 메모나 사진이 없습니다','무엇을 먹었는지 알 수 없어 보완 방법을 정하기 어렵습니다.','다르게 먹은 끼니는 사진 한 장이나 한 줄 메모를 남기세요.',9);
+  var G=[];
+  if(A.logSlots>=4&&!A.shakeSkip.length)G.push('단백질 쉐이크를 빠짐없이 챙겼습니다.');
+  if(A.fastPlan&&A.fastDone+A.fastShort===A.fastPlan)G.push('계획한 단식 '+A.fastPlan+'번을 모두 했습니다.');
+  if(A.days>=3&&!A.banned.length&&!A.words.length)G.push('금기 식품 없이 지냈습니다.');
+  if(A.days>=3&&!A.unlogged.length)G.push('빠진 날 없이 기록했습니다.');
+  F.sort(function(a,b){var o={bad:0,watch:1};return o[a.lvl]-o[b.lvl]||a.rank-b.rank;});
+  var nb=F.filter(function(f){return f.lvl==='bad';}).length;
+  A.st=A.pct==null?'info':(nb||A.pct<65)?'bad':(F.length||A.pct<85)?'watch':'good';
+  A.F=F;A.G=G;
+  A.title=A.st==='info'?'아직 판단할 기록이 부족합니다':A.st==='good'?'계획대로 잘 진행되고 있습니다':A.st==='watch'?'대체로 잘 가고 있습니다. 보완할 점이 '+F.length+'가지 있습니다':'계획에서 벗어난 부분을 바로잡을 때입니다';
+  return A;
+}
+function weekRules(m,early){
+  if(m===1)return early?'1주차 1~3일: 쉐이크 하루 4회. 배고프면 채소, 플레인 요거트, 두부.':'1주차 4~7일: 점심만 현미잡곡밥 1/2공기와 반찬, 나머지 세 번은 쉐이크.';
+  if(m===2)return '2주차: 아침과 간식은 쉐이크, 점심은 저탄수 식사(현미잡곡밥 1/2공기 또는 흰쌀밥 1/3공기), 저녁은 밥 없이 단백질과 채소. 견과류 한 줌, 오전 블랙커피 1잔 허용. 24시간 단식 주 1회.';
+  if(m===3)return '3주차: 2주차와 같고 저녁은 쉐이크로 바꿔도 됨. 토마토, 단호박, 요거트에 블루베리 소량 추가. 운동량 많은 날 운동 전후 한 끼에 고구마, 바나나, 단호박, 밤 소량. 24시간 단식 주 2회, 연속 금지.';
+  if(m===4)return '4주차: 아침과 간식 쉐이크, 점심은 허용식품 안의 일반식, 저녁은 탄수화물 제외. 24시간 단식 주 3회 권장(2회도 가능), 연속 금지.';
+  return '유지기: 저탄수, 저당류, 고단백. 14시간 공복, 주 1회 24시간 단식, 주 4회 이상 운동. 금기 식품은 주 1~2회까지.';
+}
+function buildReport(A){
+  var t=today(),tp=plan(dayNum(t)),L=[],w=A.win;
+  L.push('박용우 스위치온 4주 다이어트를 하고 있어. 아래 기록과 함께 보내는 식단 사진을 보고 알려줘.');
+  L.push('1. 지금 잘 진행되고 있는지');
+  L.push('2. 계획에서 벗어난 부분과 그 이유로 보이는 것');
+  L.push('3. 남은 기간에 보충하거나 바꿀 점을 구체적으로');
+  L.push('프로그램 규칙을 기준으로 판단하고, 사진 속 음식이 허용 식품인지도 짚어줘.');
+  L.push('');
+  L.push('[기본 정보]');
+  L.push('시작일 '+dShort(S.start)+', 오늘 '+dShort(t)+' ('+kicker(tp)+')');
+  L.push('식사 시간: 아침 '+S.times.first+', 점심 '+S.times.lunch+', 간식 '+S.times.snack+', 저녁 '+S.times.dinner);
+  L.push('공통 규칙: 공복 14시간 목표, 수면 7시간 이상, 물 2L 이상, 주 2~3회 인터벌 운동. 금기 식품: '+BANNED+'.');
+  L.push('이번 주 규칙: '+weekRules(tp.m,tp.m===1&&tp.d<=3));
+  L.push('');
+  L.push('[식단 기록 '+dShort(w.from)+' ~ '+dShort(w.to)+']');
+  var SN={plan:'계획대로',alt:'식사로 바꿈',diff:'다르게 먹음',skip:'안 먹음'};
+  for(var n=w.first;n<=w.last;n++){
+    var s=dateOf(n),p=plan(n),l=lg(s),parts=[];
+    p.meals.forEach(function(m){var r=(l.meals||{})[m.k]||{},pc=picsOf(s,m.k).length;
+      parts.push(m.name+'('+(m.kind==='shake'?'쉐이크':m.text)+') '+(SN[r.s]||'기록 없음')+(r.note?': '+r.note:'')+(pc?' [사진 '+pc+'장]':''));});
+    var line='- '+dShort(s)+' '+(p.fast?'[24시간 단식'+(l.fast==='done'?' 완료':l.fast==='short'?' 일찍 마침':l.fast==='skip'?' 못 함':' 기록 없음')+'] ':'')+parts.join(' / ');
+    if(l.extra)line+=' / 더 먹은 것: '+l.extra;
+    var ex=picsOf(s,'extra').length;if(ex)line+=' [더 먹은 것 사진 '+ex+'장]';
+    if(l.banned)line+=' / 금기 식품 먹음';
+    L.push(line);
+  }
+  var rs=recs();
+  if(rs.length){L.push('');L.push('[인바디]');rs.forEach(function(r){L.push('- '+CP_LABEL(r.cp)+' ('+dShort(r.date)+'): 체중 '+r.weight.toFixed(1)+'kg, 골격근량 '+r.muscle.toFixed(1)+'kg, 체지방량 '+r.fat.toFixed(1)+'kg, 체지방률 '+r.pbf.toFixed(1)+'%');});}
+  L.push('');L.push('[앱 자동 점검]');
+  L.push('계획대로 지킨 끼니: '+(A.pct==null?'기록 없음':A.pct+'% ('+A.ok+'/'+A.logSlots+')')+(A.fastPlan?', 단식 '+(A.fastDone+A.fastShort)+'/'+A.fastPlan+'회':'')+', 금기 식품 '+A.banned.length+'일');
+  A.F.forEach(function(f){L.push('- '+f.title);});
+  if(A.pics){L.push('');L.push('사진 파일 이름에 날짜와 끼니가 적혀 있어.');}
+  return L.join('\n');
+}
+function galleryList(w){var out=[];for(var n=w.last;n>=w.first;n--){var s=dateOf(n);picsOf(s).forEach(function(p){out.push({s:s,p:p});});}return out;}
+function prepShare(A){
+  shareFiles=[];var list=galleryList(A.win).slice(0,10);
+  Promise.all(list.map(function(x,i){return picGet(x.p.id).then(function(v){if(!v)return null;var d=parse(x.s);return new File([v.buf],(d.getMonth()+1)+'월'+d.getDate()+'일_'+(SLOT[x.p.k]||'')+'_'+(i+1)+'.jpg',{type:v.type||'image/jpeg'});},function(){return null;});}))
+  .then(function(fs){shareFiles=fs.filter(Boolean);var b=document.getElementById('shareBtn');if(b){b.disabled=!shareFiles.length;b.textContent=shareFiles.length?'2. 사진 '+shareFiles.length+'장 보내기':'2. 보낼 사진 없음';}});
+}
+function renderFeedback(){
+  var h='<header class="top"><h1>피드백</h1>',A=analyze();
+  if(!A){$app.innerHTML=h+'<p class="sub">프로그램을 시작하면 기록을 점검합니다.</p></header><section class="panel stack"><h2>'+diff(S.start,today())+'일 뒤 시작합니다</h2><p class="sub">시작 후 식사를 체크하고 사진을 남기면, 여기에서 잘 진행되는지와 보완할 점을 알려줍니다.</p></section>';return;}
+  var w=A.win;
+  h+='<p class="sub">'+dShort(w.from)+' ~ '+dShort(w.to)+' 기록 기준</p></header>';
+  h+='<div class="seg" role="group" aria-label="점검 기간">'+[['7','최근 7일'],['all','시작부터 전체']].map(function(o){return '<button data-act="fbRange" data-s="'+o[0]+'" aria-pressed="'+(fbRange===o[0])+'">'+o[1]+'</button>';}).join('')+'</div>';
+  h+='<section class="verdict '+A.st+'"><span class="badge"><svg viewBox="0 0 16 16" aria-hidden="true">'+ICON[A.st]+'</svg>'+(A.st==='info'?'기록 부족':ST_LABEL[A.st])+'</span><h2>'+esc(A.title)+'</h2>';
+  h+='<div class="deltas"><div><span class="l">계획대로</span><span class="v">'+(A.pct==null?'–':A.pct+'<small>%</small>')+'</span></div><div><span class="l">단식</span><span class="v">'+(A.fastPlan?(A.fastDone+A.fastShort)+'<small>/'+A.fastPlan+'회</small>':'–')+'</span></div><div><span class="l">금기 식품</span><span class="v">'+A.banned.length+'<small>일</small></span></div></div>';
+  h+='<p class="small">기록한 끼니 '+A.logSlots+'개 중 계획대로 '+A.ok+'개, 다르게 '+A.diff+'개, 안 먹음 '+A.skip+'개'+(A.none?'. 체크하지 않은 끼니 '+A.none+'개':'')+'</p></section>';
+  if(A.F.length){
+    h+='<section class="panel"><h2 style="margin-bottom:6px">보완할 점</h2>';
+    A.F.forEach(function(f){h+='<div class="find '+f.lvl+'"><span class="badge"><svg viewBox="0 0 16 16" aria-hidden="true">'+ICON[f.lvl]+'</svg>'+(f.lvl==='bad'?'먼저 고칠 것':'점검')+'</span><h3>'+esc(f.title)+'</h3><p class="small">'+esc(f.detail)+'</p><p class="fix"><b>이렇게 해 보세요</b>'+esc(f.fix)+'</p></div>';});
+    h+='</section>';
+  }
+  if(A.G.length)h+='<section class="panel stack"><h2>잘하고 있는 점</h2><ul class="notes">'+A.G.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></section>';
+  var last=recs().slice(-1)[0];
+  if(last&&last.cp>0){var v=verdictFor(last);h+='<section class="panel stack"><h2>인바디 판정 ('+CP_LABEL(last.cp)+')</h2><p class="sub">'+esc(v.title)+'</p>'+(A.pct!=null&&A.pct<85?'<p class="small">식단을 계획대로 지킨 비율이 낮으면 인바디 결과의 원인이 식단일 수 있습니다. 위 보완할 점부터 확인하세요.</p>':'')+'<button class="link" data-act="tab" data-v="inbody">인바디 자세히 보기</button></section>';}
+  else h+='<section class="panel stack"><h2>인바디</h2><p class="sub">주마다 인바디를 입력하면 근육과 체지방 변화로 진행 상황을 함께 판정합니다.</p><button class="link" data-act="tab" data-v="inbody">인바디 입력하기</button></section>';
+  var gal=galleryList(w);
+  h+='<section class="panel stack"><h2>사진까지 보고 피드백 받기</h2><p class="sub">위 점검은 체크와 메모만 봅니다. 사진 속 음식까지 판단하려면 기록과 사진을 Claude에게 보내세요.</p>';
+  h+='<ol class="steps"><li>기록 요약을 복사합니다.</li><li>사진 보내기를 누르고 Claude를 고릅니다. 목록에 없으면 사진을 저장해 Claude 앱에서 첨부하세요.</li><li>Claude 대화창에 요약을 붙여넣고 보냅니다.</li></ol>';
+  h+='<button class="btn" data-act="copyReport">1. 기록 요약 복사</button><button class="btn ghost" id="shareBtn" data-act="sharePics" disabled>2. 사진 준비 중</button><p class="small" id="shareNote" hidden></p>';
+  if(gal.length)h+='<div class="gallery">'+gal.map(function(x){return '<figure><button class="thumb" data-act="pic" data-v="'+esc(x.p.id)+'" aria-label="'+esc(dShort(x.s)+' '+SLOT[x.p.k])+' 사진"><img data-pid="'+esc(x.p.id)+'" alt=""></button><figcaption>'+esc(dShort(x.s).replace(/ \(.\)/,'')+' '+SLOT[x.p.k])+'</figcaption></figure>';}).join('')+'</div>';
+  else h+='<p class="small">이 기간에 남긴 사진이 없습니다. 오늘 화면의 끼니마다 사진 버튼으로 남길 수 있습니다.</p>';
+  h+='<details><summary>보낼 기록 요약 보기</summary><div class="in"><textarea id="reportOut" readonly aria-label="기록 요약" style="min-height:220px">'+esc(buildReport(A))+'</textarea></div></details></section>';
+  $app.innerHTML=h;prepShare(A);
 }
 
 /* ---------- 일정 ---------- */
@@ -493,12 +708,14 @@ function setDayType(n,type){
   var w=weekOf(n),d=wdayOf(n),m=modeOf(w),list=fastList(w).slice(),err=function(x){var e=document.getElementById('dtypeErr');if(e){e.textContent=x;e.hidden=false;}};
   if(type==='fast'){
     if(list.indexOf(d)>=0)return;
-    var moving=CAP[m]===1&&list.length>=1;
-    var adj=function(k){return weekOf(k)===w?(!moving&&list.indexOf(wdayOf(k))>=0):isFast(k);};
-    if(adj(n-1)||adj(n+1))return err('단식일은 연속으로 잡을 수 없습니다. 최소 하루 간격을 두세요.');
+    if((d===1&&isFast(n-1))||(d===7&&isFast(n+1)))return err((d===1?dShort(dateOf(n-1)):dShort(dateOf(n+1)))+'이 단식일이라 연속이 됩니다. 그날을 먼저 해제하세요.');
+    var moved=list.filter(function(x){return Math.abs(x-d)===1;});
+    list=list.filter(function(x){return Math.abs(x-d)!==1;});
     if(list.length>=CAP[m]){
-      if(CAP[m]===1)list=[];else return err('이번 주 단식은 '+CAP[m]+'회까지입니다. 다른 단식일을 먼저 해제하세요.');
+      if(CAP[m]===1){moved=moved.concat(list);list=[];}
+      else return err('이번 주 단식은 '+CAP[m]+'회까지입니다. 지금 단식일('+list.map(function(x){return dShort(dateOf((w-1)*7+x));}).join(', ')+') 중 하나를 먼저 해제하세요.');
     }
+    if(moved.length)setTimeout(function(){toast(moved.map(function(x){return dShort(dateOf((w-1)*7+x));}).join(', ')+' 단식을 '+dShort(dateOf(n))+'로 옮겼습니다');},0);
     list.push(d);list.sort(function(a,b){return a-b;});
     if(S.leanDay[w]===d)delete S.leanDay[w];
   }else{
@@ -587,8 +804,8 @@ function renderGuide(){
   h+=sec('몸에 나타날 수 있는 변화',ul(['두통, 무력감, 짜증, 집중력 저하: 탄수화물 금단 증상입니다. 보통 2~3일이면 사라지고, 계속되면 전문의와 상담하세요.','일어설 때 어지러움: 첫 주에 수분이 빠지며 생길 수 있습니다.','변비: 물을 더 마시고 유산균, 플레인 요거트를 활용하세요. 설사가 생기는 경우도 있습니다.','당뇨약을 복용 중이면 처방 의사와 상의하기 전에는 단식하면 안 됩니다. 혈압약 등 다른 약을 먹는다면 먼저 확인하세요.','4주가 지나 주 3회 단식을 이어가려면 전문가와 상담하세요.']));
   h+='<section class="panel stack"><h2>시작일과 식사 시간</h2><div class="grid2"><label class="f" for="set-start" style="grid-column:1/-1">시작일<input type="date" id="set-start" data-set="start" value="'+esc(S.start)+'"></label><label class="f" for="set-first">아침<input type="time" id="set-first" data-time="first" value="'+t.first+'"></label><label class="f" for="set-lunch">점심<input type="time" id="set-lunch" data-time="lunch" value="'+t.lunch+'"></label><label class="f" for="set-snack">간식<input type="time" id="set-snack" data-time="snack" value="'+t.snack+'"></label><label class="f" for="set-dinner">저녁<input type="time" id="set-dinner" data-time="dinner" value="'+t.dinner+'"></label></div><p class="small" id="gapText">'+gapText()+'</p></section>';
   var bk=JSON.stringify(S),good=function(x){return x===false?'문제 있음':x===true?'정상':'확인 전';};
-  h+='<section class="panel stack"><h2>저장 상태</h2><p class="sub">기기 저장: '+good(lsOk)+'<br>보조 저장: '+good(idbOk)+'<br>마지막 저장: '+(S.savedAt?esc(dShort(ymd(new Date(S.savedAt))))+' '+clock(new Date(S.savedAt)):'없음')+'<br>앱 버전: '+VER+'</p></section>';
-  h+='<section class="panel stack"><h2>백업</h2><p class="sub">기록은 이 아이폰의 앱 안에만 저장됩니다. 앱을 지우면 함께 사라지니 메모 앱 등에 복사해 두세요.</p><p class="small">마지막 백업: '+(S.backupAt?esc(dShort(S.backupAt.slice(0,10))):'없음')+'</p><button class="btn" data-act="copy">백업 내용 복사</button><textarea id="bkOut" readonly aria-label="백업 내용">'+esc(bk)+'</textarea><label class="f" for="bkIn">복원할 내용 붙여넣기<textarea id="bkIn"></textarea></label><button class="btn ghost" data-act="restore">복원</button><p class="err" id="bkErr" hidden></p></section>';
+  h+='<section class="panel stack"><h2>저장 상태</h2><p class="sub">기기 저장: '+good(lsOk)+'<br>보조 저장: '+good(idbOk)+'<br>마지막 저장: '+(S.savedAt?esc(dShort(ymd(new Date(S.savedAt))))+' '+clock(new Date(S.savedAt)):'없음')+'<br>저장한 사진: '+Object.keys(S.log).reduce(function(a,d){return a+(S.log[d].pics||[]).length;},0)+'장<br>앱 버전: '+VER+'</p></section>';
+  h+='<section class="panel stack"><h2>백업</h2><p class="sub">기록은 이 아이폰의 앱 안에만 저장됩니다. 앱을 지우면 함께 사라지니 메모 앱 등에 복사해 두세요. 사진은 백업에 들어가지 않습니다.</p><p class="small">마지막 백업: '+(S.backupAt?esc(dShort(S.backupAt.slice(0,10))):'없음')+'</p><button class="btn" data-act="copy">백업 내용 복사</button><textarea id="bkOut" readonly aria-label="백업 내용">'+esc(bk)+'</textarea><label class="f" for="bkIn">복원할 내용 붙여넣기<textarea id="bkIn"></textarea></label><button class="btn ghost" data-act="restore">복원</button><p class="err" id="bkErr" hidden></p></section>';
   h+='<section class="stack"><button class="btn danger" data-act="reset">'+(armed==='reset'?'한 번 더 누르면 모든 기록 삭제':'모든 기록 지우기')+'</button><p class="small">박용우 교수의 다이어트 영상 스크립트와 공개 자료를 개인 체크용으로 정리했습니다. 공식 앱이 아닙니다. 밥 양과 음식 목록은 영상 화면의 표로 다시 확인이 필요합니다.</p></section>';
   $app.innerHTML=h;
 }
@@ -612,7 +829,8 @@ function loadDemo(){
 /* ---------- 렌더 ---------- */
 function render(){
   document.querySelectorAll('nav.tabs button').forEach(function(b){if(b.dataset.v===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-  ({today:renderToday,plan:renderPlan,inbody:renderInbody,guide:renderGuide})[tab]();
+  ({today:renderToday,plan:renderPlan,feedback:renderFeedback,inbody:renderInbody,guide:renderGuide})[tab]();
+  hydrate();
 }
 function closeSheet(){document.getElementById('sheetwrap').hidden=true;}
 function touch(v){return S.log[v]||(S.log[v]={});}
@@ -621,7 +839,7 @@ document.addEventListener('click',function(e){
   if(e.target.id==='sheetwrap'){closeSheet();return;}
   var b=e.target.closest('[data-act]');if(!b||b.disabled)return;
   var a=b.dataset.act,val=b.dataset.v,v=curView();
-  if(a!=='reset'&&a!=='ibDel')armed=null;
+  if(a!=='reset'&&a!=='ibDel'&&a!=='picDel')armed=null;
   if(a==='tab'){tab=val;ibForm=null;ibErr='';if(val==='today')viewDate=null;render();window.scrollTo(0,0);}
   else if(a==='view'){viewDate=val;render();}
   else if(a==='wk'){var nv=addDays(v,7*(+val));viewDate=nv<S.start?S.start:nv;render();}
@@ -631,6 +849,17 @@ document.addEventListener('click',function(e){
   else if(a==='dtype'){setDayType(+b.dataset.k,b.dataset.s);}
   else if(a==='goto'){closeSheet();tab='today';viewDate=val;render();window.scrollTo(0,0);}
   else if(a==='close'){closeSheet();}
+  else if(a==='pic'){openPic(val);}
+  else if(a==='picDel'){var key2='pic'+val;if(armed===key2){armed=null;var fp=findPic(val);if(fp){S.log[fp.date].pics=S.log[fp.date].pics.filter(function(x){return x.id!==val;});save();}picDel(val).catch(function(){});if(PIC[val]){URL.revokeObjectURL(PIC[val]);delete PIC[val];}closeSheet();render();toast('사진을 삭제했습니다');}else{armed=key2;openPic(val);}}
+  else if(a==='fbRange'){fbRange=b.dataset.s;render();}
+  else if(a==='copyReport'){var ro2=document.getElementById('reportOut'),txt2=ro2?ro2.value:'',ok2=function(){toast('기록 요약을 복사했습니다');};
+    var fb2=function(){var d=ro2.closest('details');if(d)d.open=true;ro2.focus();ro2.select();ro2.setSelectionRange(0,txt2.length);var ok=false;try{ok=document.execCommand('copy');}catch(x){}if(ok)ok2();else toast('아래 요약을 길게 눌러 복사하세요');};
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt2).then(ok2,fb2);else fb2();}
+  else if(a==='sharePics'){var note=document.getElementById('shareNote'),say=function(m){if(note){note.textContent=m;note.hidden=false;}};
+    if(!shareFiles.length){say('보낼 사진이 없습니다.');}
+    else if(navigator.canShare&&navigator.canShare({files:shareFiles})){navigator.share({files:shareFiles}).catch(function(err){if(err&&err.name!=='AbortError')say('사진을 보내지 못했습니다. 아래 사진을 눌러 크게 연 뒤 길게 눌러 저장하고, Claude 앱에서 첨부하세요.');});}
+    else say('이 기기에서는 사진 보내기를 쓸 수 없습니다. 아래 사진을 눌러 크게 연 뒤 길게 눌러 저장하고, Claude 앱에서 첨부하세요.');}
+
   else if(a==='ibNew'){ibForm=newForm();ibErr='';render();window.scrollTo(0,0);}
   else if(a==='ibEdit'){var ex=S.inbody.filter(function(r){return r.cp===+val;})[0];ibForm=Object.assign({},ex,{editing:true});ibErr='';render();window.scrollTo(0,0);}
   else if(a==='ibCancel'){ibForm=null;ibErr='';render();}
@@ -640,7 +869,7 @@ document.addEventListener('click',function(e){
     var fb=function(){out.focus();out.select();out.setSelectionRange(0,out.value.length);var ok=false;try{ok=document.execCommand('copy');}catch(x){}if(ok)done();else toast('아래 내용을 길게 눌러 복사하세요');};
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(out.value).then(done,fb);else fb();}
   else if(a==='restore'){var inp=document.getElementById('bkIn').value.trim(),er=document.getElementById('bkErr');try{var d=JSON.parse(inp);if(!d||!d.start||!d.log)throw 0;S=Object.assign(blank(),d);demo=false;save();viewDate=null;render();toast('복원했습니다');}catch(x){er.textContent='복원하지 못했습니다. 백업 내용을 처음부터 끝까지 붙여넣었는지 확인하세요.';er.hidden=false;}}
-  else if(a==='reset'){if(armed==='reset'){armed=null;demo=false;S=blank();save();viewDate=null;tab='today';render();toast('모든 기록을 지웠습니다');}else{armed='reset';render();}}
+  else if(a==='reset'){if(armed==='reset'){armed=null;demo=false;S=blank();picClear().catch(function(){});Object.keys(PIC).forEach(function(k){URL.revokeObjectURL(PIC[k]);});PIC={};PICMISS={};save();viewDate=null;tab='today';render();toast('모든 기록을 지웠습니다');}else{armed='reset';render();}}
   else if(a==='startToday'){S.start=today();viewDate=null;save();render();toast('오늘부터 시작합니다');}
   else if(a==='demo'){loadDemo();}
   else if(a==='demoEnd'){demo=false;S=load();viewDate=null;render();}
@@ -654,7 +883,8 @@ document.addEventListener('input',function(e){
 });
 document.addEventListener('change',function(e){
   var t=e.target;
-  if(t.dataset.banned){touch(curView()).banned=t.checked;save();}
+  if(t.dataset.pic&&t.files&&t.files[0]){addPhoto(curView(),t.dataset.pic,t.files[0]);t.value='';}
+  else if(t.dataset.banned){touch(curView()).banned=t.checked;save();}
   else if(t.dataset.set==='start'&&t.value){S.start=t.value;viewDate=null;save();toast('시작일을 저장했습니다');}
   else if(t.dataset.time&&t.value){S.times[t.dataset.time]=t.value;save();var g=document.getElementById('gapText');if(g)g.textContent=gapText();}
 });
@@ -664,7 +894,7 @@ document.addEventListener('visibilitychange',function(){if(document.hidden){if(r
 window.addEventListener('pagehide',function(){if(ready)save(true);});
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
 
-window.__app={ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
+window.__app={analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
 var ready=false;
 function boot(){
   var wait=new Promise(function(res){setTimeout(function(){res(undefined);},1000);});
