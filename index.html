@@ -255,7 +255,7 @@ function r1(x){return Math.round(x*10)/10;}
 function sign(x){x=r1(x);return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1);}
 
 /* ---------- 저장 ---------- */
-var VER='1.4',DB='four-week-meal-check';
+var VER='1.5',DB='four-week-meal-check';
 var IS_APP=window.__IS_APP||/github\.io$/.test(location.hostname);
 var mem=null, demo=false, lsOk=null, idbOk=null, lastSaved=null, persisted=null;
 function idbS(store,mode,fn){return new Promise(function(res,rej){
@@ -462,7 +462,7 @@ function seg(key,opts,cur,dis){
 }
 function fastClock(v){
   var end=parse(v),p=fastEnd().split(':');end.setHours(+p[0],+p[1],0,0);var st=new Date(end.getTime()-864e5),t=now();
-  var el=Math.max(0,Math.min(864e5,t-st)),left=864e5-el,pct=Math.round(el/864e4*10)/10;
+  var el=Math.max(0,Math.min(864e5,t-st)),left=864e5-el,pct=Math.round(el/864e3*10)/10;
   var hm=function(ms){var m=Math.round(ms/6e4);return Math.floor(m/60)+'시간 '+pad(m%60)+'분';};
   return {el:hm(el),left:hm(left),pct:pct,done:left<=0};
 }
@@ -483,7 +483,7 @@ function renderToday(){
   if(p.fast){
     var c2=fastClock(v);
     h+='<section class="fastcard"><div class="row"><span>전날 저녁 '+S.times.dinner+' 시작</span><span>오늘 저녁 '+S.times.dinner+' 끝</span></div>';
-    if(v===t)h+='<p class="big" id="fbig">'+(c2.done?'단식이 끝났습니다':c2.left+' 남음')+'</p><div class="bar" role="img" aria-label="단식 진행 '+c2.pct+'퍼센트"><i id="fbar" style="width:'+c2.pct+'%"></i></div>';
+    if(v===t)h+='<p class="big" id="fbig">'+(c2.done?'단식이 끝났습니다':c2.left+' 남음')+'</p><div class="bar" id="fbarbox" role="img" aria-label="단식 진행 '+Math.floor(c2.pct)+'퍼센트"><i id="fbar" style="width:'+c2.pct+'%"></i></div><div class="row"><span id="fel">'+c2.el+' 지남</span><span id="fpct">'+Math.floor(c2.pct)+'%</span></div>';
     h+=seg({a:'fast'},[['done','24시간 완료'],['short','일찍 마침'],['skip','못 함']],l.fast,ro)+'</section>';
   }
   var nextK=null;
@@ -889,12 +889,14 @@ document.addEventListener('change',function(e){
   else if(t.dataset.time&&t.value){S.times[t.dataset.time]=t.value;save();var g=document.getElementById('gapText');if(g)g.textContent=gapText();}
 });
 document.addEventListener('submit',function(e){if(e.target.id==='ibf'){e.preventDefault();saveInbody(e.target);}});
-setInterval(function(){var b=document.getElementById('fbig'),i=document.getElementById('fbar');if(!b||!i)return;var c=fastClock(curView());b.textContent=c.done?'단식이 끝났습니다':c.left+' 남음';i.style.width=c.pct+'%';},30000);
+function tickFast(){var b=document.getElementById('fbig'),i=document.getElementById('fbar');if(!b||!i)return;var c=fastClock(curView()),q=Math.floor(c.pct)+'%';b.textContent=c.done?'단식이 끝났습니다':c.left+' 남음';i.style.width=c.pct+'%';
+  var e=document.getElementById('fel'),f=document.getElementById('fpct'),x=document.getElementById('fbarbox');if(e)e.textContent=c.el+' 지남';if(f)f.textContent=q;if(x)x.setAttribute('aria-label','단식 진행 '+q.replace('%','퍼센트'));}
+setInterval(tickFast,15000);
 document.addEventListener('visibilitychange',function(){if(document.hidden){if(ready)save(true);}else if(ready)render();});
 window.addEventListener('pagehide',function(){if(ready)save(true);});
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
 
-window.__app={analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
+window.__app={fastClock:fastClock,tickFast:tickFast,analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
 var ready=false;
 function boot(){
   var wait=new Promise(function(res){setTimeout(function(){res(undefined);},1000);});
