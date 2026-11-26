@@ -151,6 +151,8 @@ details>.in{padding-bottom:16px;display:flex;flex-direction:column;gap:12px}
 .legend i.t{border:0;outline:3px solid var(--sun);outline-offset:-2px}
 .wrow{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 0;border-bottom:1px solid var(--line)}
 .wrow:last-child{border-bottom:0}
+button.wrow{width:100%;text-align:left;color:inherit;border-radius:0}
+.wrow .chg{color:var(--accent);font-weight:650;text-decoration:underline;text-underline-offset:3px}
 .wrow b{font-size:16px}
 .wrow .r{font-size:14px;color:var(--sub);font-variant-numeric:tabular-nums;text-align:right}
 .wrow .d{grid-column:1/-1;font-size:14px;color:var(--sub)}
@@ -255,7 +257,7 @@ function r1(x){return Math.round(x*10)/10;}
 function sign(x){x=r1(x);return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1);}
 
 /* ---------- 저장 ---------- */
-var VER='1.5',DB='four-week-meal-check';
+var VER='1.6',DB='four-week-meal-check';
 var IS_APP=window.__IS_APP||/github\.io$/.test(location.hostname);
 var mem=null, demo=false, lsOk=null, idbOk=null, lastSaved=null, persisted=null;
 function idbS(store,mode,fn){return new Promise(function(res,rej){
@@ -475,6 +477,7 @@ function renderToday(){
     var dd=diff(S.start,t);
     h+='<section class="panel stack"><h2>'+dd+'일 뒤 시작합니다</h2><ul class="notes"><li>단백질 쉐이크를 준비하세요. 첫 주에만 24회 마십니다.</li><li>시작 전에 인바디를 측정해 입력하세요.</li><li>첫 3일은 두통과 집중력 저하가 올 수 있습니다. 큰 일정과 겹치지 않게 잡으세요.</li><li>당뇨약을 복용 중이면 처방 의사와 상의하기 전에는 단식하면 안 됩니다.</li></ul><button class="btn" data-act="startToday">오늘부터 시작하기</button><button class="link" data-act="tab" data-v="guide">시작일과 식사 시간 바꾸기</button>'+(IS_APP?'':'<button class="link" data-act="demo">예시로 둘러보기</button>')+'</section>';
   }
+  if(p.w<=4&&p.m!==p.w&&!demo)h+='<div class="banner"><span>이번 주는 '+MODE[p.m]+(p.m<5?' 식단':'')+'으로 바꿔 두었습니다.</span><button class="link" data-act="wkmode" data-w="'+p.w+'" data-v="'+p.w+'">'+p.w+'주차 식단으로 되돌리기</button></div>';
   h+=strip(v);
   if(!demo&&started&&S.backupAt!==undefined){var has=Object.keys(S.log).length||S.inbody.length;var old=S.backupAt?diff(t,S.backupAt.slice(0,10)):null;
     if(has&&(old===null?dayNum(t)>7:old>=7))h+='<div class="banner"><span>기록을 백업한 지 '+(old===null?'한 번도 없습니다':old+'일 지났습니다')+'. 기록은 이 아이폰에만 있습니다.</span><button class="link" data-act="tab" data-v="guide">백업하기</button></div>';}
@@ -683,11 +686,11 @@ function renderPlan(){
   h+='<header class="top"><h1>일정</h1></header>';
   h+='<section class="punch"><div class="head"><strong>'+head+'</strong><span>'+dShort(S.start)+' 시작, 완료 '+doneN+'일</span></div><div class="pgrid">'+cells+'</div></section>';
   h+='<div class="legend"><span><i class="d"></i>계획대로 완료</span><span><i class="p"></i>일부 기록</span><span><i class="f"></i>단식일</span><span><i class="l"></i>보완일</span><span><i class="t"></i>오늘</span></div>';
-  h+='<p class="small">날짜를 누르면 그날 계획을 보고 단식일을 옮길 수 있습니다.</p>';
+  h+='<p class="small">날짜를 누르면 그날 계획을 보고 단식일을 옮길 수 있습니다. 아래 주를 누르면 그 주의 식단 방식을 바꾸거나 되돌릴 수 있습니다.</p>';
   h+='<section class="panel" aria-label="주별 계획">';
   for(w=1;w<=W;w++){var m=modeOf(w),fl=fastList(w),a=adherence(w),base=(w-1)*7;
     var ftxt=fl.length?'단식 '+fl.length+'회: '+fl.map(function(x){return WD[parse(dateOf(base+x)).getDay()];}).join(', ')+'요일':'단식 없음';
-    h+='<div class="wrow"><b>'+(w===m?MODE[m]:w+'번째 주: '+MODE[m]+' 방식')+'</b><span class="r">'+(a.total?a.ok+'/'+a.total+'끼':'')+'</span><span class="d">'+esc(AIM[m])+'. '+ftxt+(a.banned?'. 금기 식품 '+a.banned+'일':'')+'</span></div>';}
+    h+='<button class="wrow" data-act="week" data-v="'+w+'" aria-label="'+w+'번째 주 식단 방식 바꾸기"><b>'+(w===m?MODE[m]:w+'번째 주: '+MODE[m]+' 방식')+'</b><span class="r">'+(a.total?a.ok+'/'+a.total+'끼':'')+'</span><span class="d">'+esc(AIM[m])+'. '+ftxt+(a.banned?'. 금기 식품 '+a.banned+'일':'')+'</span><span class="d chg">방식 바꾸기</span></button>';}
   h+='</section>';
   $app.innerHTML=h;
 }
@@ -703,6 +706,29 @@ function openDay(n){
   h+='<button class="btn" data-act="goto" data-v="'+s+'">이날 식단 열기</button><button class="btn ghost" data-act="close">닫기</button>';
   document.getElementById('sheet').innerHTML=h;
   document.getElementById('sheetwrap').hidden=false;
+}
+function baseMode(w){return w<=4?w:5;}
+function setWeekMode(w,m){
+  var old=modeOf(w);if(old===m)return;
+  var list=fastList(w).slice(),t=today(),tw=(dayNum(t)>=1&&weekOf(dayNum(t))===w)?wdayOf(dayNum(t)):(dateOf((w-1)*7+1)>t?0:8);
+  if(CAP[m]===0)list=[];
+  else if(tw===0)list=DEF_FAST[m].slice();
+  else if(!list.length)list=DEF_FAST[m].filter(function(x){return x>tw;});
+  while(list.length>CAP[m]){var fut=list.filter(function(x){return x>tw;});var drop=fut.length?fut[fut.length-1]:list[list.length-1];list=list.filter(function(x){return x!==drop;});}
+  S.fastDays[w]=list;
+  if(m===baseMode(w))delete S.modes[w];else S.modes[w]=m;
+  if(m!==4)delete S.leanDay[w];
+  save();
+}
+function weekToast(w){var m=modeOf(w),n=fastList(w).length;
+  return w+'번째 주를 '+MODE[m]+(m<5?' 식단으로':'로')+' 바꿨습니다'+(m===4&&n<3?'. 단식 '+n+'회, 일정에서 추가할 수 있습니다':'');}
+function openWeek(w){
+  var m=modeOf(w),b=baseMode(w),base=(w-1)*7,fl=fastList(w);
+  var h='<p class="kicker">'+w+'번째 주 ('+dShort(dateOf(base+1))+' ~ '+dShort(dateOf(base+7))+')</p><h2>식단 방식</h2><p class="sub">지금: '+MODE[m]+(m<5?' 방식':'')+(m!==b?' (원래는 '+MODE[b]+')':'')+'. 단식 '+fl.length+'회</p>';
+  if(m!==b)h+='<button class="btn" data-act="wkmode" data-w="'+w+'" data-v="'+b+'">'+MODE[b]+(b<5?' 식단으로':'로')+' 되돌리기</button>';
+  h+='<h3>다른 방식으로 바꾸기</h3><div class="seg">'+[1,2,3,4,5].filter(function(x){return x!==m;}).map(function(x){return '<button data-act="wkmode" data-w="'+w+'" data-v="'+x+'">'+MODE[x]+'</button>';}).join('')+'</div>';
+  h+='<p class="small">바꿔도 지금까지의 식단 기록과 이미 지난 단식일은 그대로 남습니다. 바꾼 뒤 단식일은 일정에서 날짜를 눌러 조정하세요.</p><button class="btn ghost" data-act="close">닫기</button>';
+  document.getElementById('sheet').innerHTML=h;document.getElementById('sheetwrap').hidden=false;
 }
 function setDayType(n,type){
   var w=weekOf(n),d=wdayOf(n),m=modeOf(w),list=fastList(w).slice(),err=function(x){var e=document.getElementById('dtypeErr');if(e){e.textContent=x;e.hidden=false;}};
@@ -864,7 +890,8 @@ document.addEventListener('click',function(e){
   else if(a==='ibEdit'){var ex=S.inbody.filter(function(r){return r.cp===+val;})[0];ibForm=Object.assign({},ex,{editing:true});ibErr='';render();window.scrollTo(0,0);}
   else if(a==='ibCancel'){ibForm=null;ibErr='';render();}
   else if(a==='ibDel'){var key='ib'+val;if(armed===key){S.inbody=S.inbody.filter(function(r){return r.cp!==+val;});armed=null;ibForm=null;save();render();toast('삭제했습니다');}else{armed=key;render();}}
-  else if(a==='apply'){var w=+b.dataset.w;S.modes[w]=+val;delete S.fastDays[w];delete S.leanDay[w];save();render();toast(w+'번째 주를 '+MODE[+val]+(+val<5?' 방식으로':'로')+' 바꿨습니다');}
+  else if(a==='apply'||a==='wkmode'){var w=+b.dataset.w;setWeekMode(w,+val);if(a==='wkmode')closeSheet();render();toast(weekToast(w));}
+  else if(a==='week'){openWeek(+val);}
   else if(a==='copy'){var out=document.getElementById('bkOut'),done=function(){S.backupAt=now().toISOString();save();toast('복사했습니다. 메모 앱에 붙여넣으세요');};
     var fb=function(){out.focus();out.select();out.setSelectionRange(0,out.value.length);var ok=false;try{ok=document.execCommand('copy');}catch(x){}if(ok)done();else toast('아래 내용을 길게 눌러 복사하세요');};
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(out.value).then(done,fb);else fb();}
@@ -896,7 +923,7 @@ document.addEventListener('visibilitychange',function(){if(document.hidden){if(r
 window.addEventListener('pagehide',function(){if(ready)save(true);});
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
 
-window.__app={fastClock:fastClock,tickFast:tickFast,analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
+window.__app={setWeekMode:setWeekMode,fastClock:fastClock,tickFast:tickFast,analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
 var ready=false;
 function boot(){
   var wait=new Promise(function(res){setTimeout(function(){res(undefined);},1000);});
