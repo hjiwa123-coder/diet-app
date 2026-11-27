@@ -257,7 +257,7 @@ function r1(x){return Math.round(x*10)/10;}
 function sign(x){x=r1(x);return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(1);}
 
 /* ---------- 저장 ---------- */
-var VER='1.6',DB='four-week-meal-check';
+var VER='1.7',DB='four-week-meal-check';
 var IS_APP=window.__IS_APP||/github\.io$/.test(location.hostname);
 var mem=null, demo=false, lsOk=null, idbOk=null, lastSaved=null, persisted=null;
 function idbS(store,mode,fn){return new Promise(function(res,rej){
@@ -390,6 +390,10 @@ var BANNED='과일, 주스, 튀김, 밀가루, 떡, 당류, 술';
 
 /* ---------- 실천 집계 ---------- */
 function lg(s){return S.log[s]||{};}
+var EXN={hiit:'인터벌',light:'걷기·가벼운 운동',none:'안 함'};
+function exOf(s){return lg(s).ex||{};}
+function exWeek(w){var c={hiit:0,light:0},t=today();for(var d=1;d<=7;d++){var s=dateOf((w-1)*7+d);if(s>t)continue;var e=exOf(s).t;if(e==='hiit'||e==='light')c[e]++;}return c;}
+function exLabel(e){return e&&e.t?EXN[e.t]+(e.min?' '+e.min+'분':'')+(e.note?' ('+e.note+')':''):'';}
 function dayStatus(n){
   var s=dateOf(n),l=lg(s),p=plan(n),ok=0,any=false,total=p.meals.length+(p.fast?1:0);
   p.meals.forEach(function(m){var r=(l.meals||{})[m.k];if(r&&r.s){any=true;if(r.s==='plan'||r.s==='alt')ok++;}});
@@ -507,6 +511,18 @@ function renderToday(){
   h+='</section>';
   if(!ro)h+='<p class="small" id="saveStat" aria-live="polite"></p>';
   if(!ro)h+='<section class="panel stack"><label class="f" for="extra">계획 밖에 더 먹은 것</label><input type="text" id="extra" data-extra="1" value="'+esc(l.extra||'')+'" placeholder="두부 반 모, 견과류 한 줌">'+picRow(v,'extra','더 먹은 것')+'<label class="check"><input type="checkbox" id="banned" data-banned="1"'+(l.banned?' checked':'')+'>금기 식품을 먹었습니다</label></section>';
+  if(!ro){
+    var ex=exOf(v),wc=exWeek(p.w),yex=exOf(addDays(v,-1)).t,goal=p.m<5?'목표 주 2~3회':'목표 주 4회 이상';
+    h+='<section class="panel stack" aria-label="운동"><div><h3>운동</h3><span class="small">이번 주 인터벌 '+wc.hiit+'회'+(wc.light?', 가벼운 운동 '+wc.light+'회':'')+' · '+goal+'</span></div>';
+    h+=seg({a:'ex'},[['hiit','인터벌'],['light','걷기 등'],['none','안 함']],ex.t,false);
+    if(ex.t==='hiit'||ex.t==='light')h+='<div class="grid2" style="grid-template-columns:96px 1fr"><label class="f" for="ex-min">시간(분)<input id="ex-min" data-exmin="1" inputmode="numeric" value="'+esc(ex.min||'')+'" placeholder="20"></label><label class="f" for="ex-note">한 운동<input id="ex-note" data-exnote="1" value="'+esc(ex.note||'')+'" placeholder="스쿼트 30초×8"></label></div>';
+    var tips=[];
+    if(p.fast)tips.push('단식일에 인터벌을 하면 지방 연소에 도움이 됩니다. 어지러우면 강도를 낮추거나 걷기로 바꾸세요.');
+    if(yex==='hiit'&&ex.t!=='hiit')tips.push('어제 인터벌을 했습니다. 오늘은 걷기 같은 가벼운 활동을 권합니다.');
+    if(l.banned&&ex.t!=='hiit')tips.push('금기 식품을 먹은 날입니다. 짧고 강한 인터벌 운동을 하면 도움이 됩니다.');
+    if(tips.length)h+='<ul class="notes">'+tips.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
+    h+='<button class="link" data-act="exHow">인터벌 운동 방법 보기</button></section>';
+  }
   if(p.notes.length)h+='<section class="panel"><ul class="notes">'+p.notes.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></section>';
   var early=p.m===1&&p.d<=3;
   h+='<details><summary>'+esc(MODE[p.m])+' 먹어도 되는 것</summary><div class="in"><div class="foods">'+foods(p.m,early).map(function(f){return '<div><span class="k">'+esc(f[0])+'</span><span>'+esc(f[1])+'</span></div>';}).join('')+'<div><span class="k">금기</span><span>'+BANNED+'</span></div></div></div></details>';
@@ -585,7 +601,17 @@ function analyze(){
   if(A.fastPlan&&fm)add('watch','단식 '+A.fastPlan+'번 중 '+fm+'번을 하지 못했거나 기록하지 않았습니다',A.fastSkip.concat(A.fastNone).map(dShort).join(', ')+'.','바쁜 날과 겹치면 일정 화면에서 단식일을 옮기세요. 처음에는 18~20시간에서 끝내도 됩니다. 연속으로 하지는 마세요.',7);
   if(A.unlogged.length)add('watch','기록이 없는 날이 '+A.unlogged.length+'일 있습니다',A.unlogged.map(dShort).join(', ')+'. 기록이 비어 있으면 인바디 결과가 나빠도 원인을 찾기 어렵습니다.','하루를 마칠 때 한 번에 체크해도 됩니다. 못 지킨 날일수록 기록해 두세요.',8);
   if(A.diffBare>=2)add('watch','다르게 먹은 끼니 '+A.diffBare+'개에 메모나 사진이 없습니다','무엇을 먹었는지 알 수 없어 보완 방법을 정하기 어렵습니다.','다르게 먹은 끼니는 사진 한 장이나 한 줄 메모를 남기세요.',9);
+  var hi=0,li=0,consec=[],nPast=0;
+  for(var k=win.first;k<=win.last;k++){var ds=dateOf(k),et=exOf(ds).t;if(et==='hiit'){hi++;if(exOf(addDays(ds,-1)).t==='hiit'&&k>win.first)consec.push(dShort(ds));}if(et==='light')li++;}
+  A.hiit=hi;A.light=li;
+  var cm=plan(win.last).m,perWk=A.days?Math.round(hi*7/A.days*10)/10:0,allWk=A.days?Math.round((hi+li)*7/A.days*10)/10:0;
+  if(A.days>=5){
+    if(cm<5&&perWk<2)add('watch',hi?'인터벌 운동이 주 '+perWk+'회입니다':'인터벌 운동 기록이 없습니다','영상에서는 주 2~3회 짧고 강한 인터벌 운동이 핵심이라고 합니다.'+(li?' 가벼운 운동은 '+li+'번 했습니다.':''),'30초 세게, 60초 쉬기를 8번 반복하면 준비와 정리를 합쳐 20분이면 됩니다. 단식일이나 금기 식품을 먹은 날에 넣어 보세요.',6.5);
+    else if(cm===5&&allWk<4)add('watch','운동이 주 '+allWk+'회입니다','유지기에는 주 4회 이상 운동을 권합니다.','인터벌 2회에 걷기 2회처럼 나눠서 채워 보세요.',6.5);
+  }
+  if(consec.length)add('watch','이틀 연속 인터벌을 한 날이 있습니다',consec.join(', ')+'. 고강도 운동은 회복할 시간이 필요합니다.','인터벌 다음 날은 걷기 같은 가벼운 활동으로 바꾸세요.',6.6);
   var G=[];
+  if(A.days>=5&&(cm<5?perWk>=2:allWk>=4))G.push(cm<5?'인터벌 운동을 주 '+perWk+'회 했습니다.':'운동을 주 '+allWk+'회 했습니다.');
   if(A.logSlots>=4&&!A.shakeSkip.length)G.push('단백질 쉐이크를 빠짐없이 챙겼습니다.');
   if(A.fastPlan&&A.fastDone+A.fastShort===A.fastPlan)G.push('계획한 단식 '+A.fastPlan+'번을 모두 했습니다.');
   if(A.days>=3&&!A.banned.length&&!A.words.length)G.push('금기 식품 없이 지냈습니다.');
@@ -628,11 +654,13 @@ function buildReport(A){
     if(l.extra)line+=' / 더 먹은 것: '+l.extra;
     var ex=picsOf(s,'extra').length;if(ex)line+=' [더 먹은 것 사진 '+ex+'장]';
     if(l.banned)line+=' / 금기 식품 먹음';
+    if(l.ex&&l.ex.t)line+=' / 운동: '+exLabel(l.ex);
     L.push(line);
   }
   var rs=recs();
   if(rs.length){L.push('');L.push('[인바디]');rs.forEach(function(r){L.push('- '+CP_LABEL(r.cp)+' ('+dShort(r.date)+'): 체중 '+r.weight.toFixed(1)+'kg, 골격근량 '+r.muscle.toFixed(1)+'kg, 체지방량 '+r.fat.toFixed(1)+'kg, 체지방률 '+r.pbf.toFixed(1)+'%');});}
   L.push('');L.push('[앱 자동 점검]');
+  L.push('운동: 인터벌 '+A.hiit+'회, 걷기·가벼운 운동 '+A.light+'회 ('+A.days+'일 동안)');
   L.push('계획대로 지킨 끼니: '+(A.pct==null?'기록 없음':A.pct+'% ('+A.ok+'/'+A.logSlots+')')+(A.fastPlan?', 단식 '+(A.fastDone+A.fastShort)+'/'+A.fastPlan+'회':'')+', 금기 식품 '+A.banned.length+'일');
   A.F.forEach(function(f){L.push('- '+f.title);});
   if(A.pics){L.push('');L.push('사진 파일 이름에 날짜와 끼니가 적혀 있어.');}
@@ -689,8 +717,9 @@ function renderPlan(){
   h+='<p class="small">날짜를 누르면 그날 계획을 보고 단식일을 옮길 수 있습니다. 아래 주를 누르면 그 주의 식단 방식을 바꾸거나 되돌릴 수 있습니다.</p>';
   h+='<section class="panel" aria-label="주별 계획">';
   for(w=1;w<=W;w++){var m=modeOf(w),fl=fastList(w),a=adherence(w),base=(w-1)*7;
+    var ec=exWeek(w),etxt=(ec.hiit||ec.light)?'. 인터벌 '+ec.hiit+'회'+(ec.light?', 가벼운 운동 '+ec.light+'회':''):'';
     var ftxt=fl.length?'단식 '+fl.length+'회: '+fl.map(function(x){return WD[parse(dateOf(base+x)).getDay()];}).join(', ')+'요일':'단식 없음';
-    h+='<button class="wrow" data-act="week" data-v="'+w+'" aria-label="'+w+'번째 주 식단 방식 바꾸기"><b>'+(w===m?MODE[m]:w+'번째 주: '+MODE[m]+' 방식')+'</b><span class="r">'+(a.total?a.ok+'/'+a.total+'끼':'')+'</span><span class="d">'+esc(AIM[m])+'. '+ftxt+(a.banned?'. 금기 식품 '+a.banned+'일':'')+'</span><span class="d chg">방식 바꾸기</span></button>';}
+    h+='<button class="wrow" data-act="week" data-v="'+w+'" aria-label="'+w+'번째 주 식단 방식 바꾸기"><b>'+(w===m?MODE[m]:w+'번째 주: '+MODE[m]+' 방식')+'</b><span class="r">'+(a.total?a.ok+'/'+a.total+'끼':'')+'</span><span class="d">'+esc(AIM[m])+'. '+ftxt+etxt+(a.banned?'. 금기 식품 '+a.banned+'일':'')+'</span><span class="d chg">방식 바꾸기</span></button>';}
   h+='</section>';
   $app.innerHTML=h;
 }
@@ -827,6 +856,7 @@ function renderGuide(){
   h+=sec('매일 지키는 5가지',ul(['공복: 14시간이 목표입니다. 처음에는 12시간도 괜찮습니다.','수면: 하루 최소 7시간.','금기 식품: '+BANNED+'.','운동: 주 2~3회 짧고 강한 인터벌 운동. 어려우면 걷기부터, 30분 이상 앉아 있지 않기.','수분: 하루 2L 이상.']),true);
   h+=sec('24시간 단식',ul(['전날 저녁 '+t.dinner+'에 마지막 식사를 하고, 다음 날 저녁 '+t.dinner+'에 첫 식사를 합니다.','단식 중에는 물, 카페인 없는 차, 영양제만 됩니다.','끝난 뒤 저녁을 거르지 말고 단백질을 충분히 드세요.','연속으로 하지 않습니다. 최소 하루 간격을 둡니다. 앱에서도 막아 둡니다.','처음에는 18~20시간에서 끝내도 됩니다.']));
   h+=sec('주차별 요약',['1주차: 1~3일 쉐이크 4회, 4~7일 점심 저탄수 식사와 쉐이크 3회.','2주차: 아침과 간식 쉐이크, 점심 저탄수 식사, 저녁 밥 없음. 단식 주 1회.','3주차: 2주차와 같고 저녁은 쉐이크로 대체 가능. 단식 주 2회.','4주차(선택): 점심 일반식, 저녁 탄수화물 제외. 단식 주 3회 권장, 주 2회도 가능.','유지기: 저탄수, 저당류, 고단백. 14시간 공복, 주 4회 이상 운동, 주 1회 단식. 금기 식품은 주 1~2회까지.'].map(function(x){return '<p class="sub">'+esc(x)+'</p>';}).join(''));
+  h+='<details id="exguide"><summary>인터벌 운동 방법</summary><div class="in"><p class="sub">숨이 찰 만큼 세게 움직이는 구간과 쉬는 구간을 번갈아 반복합니다. 세게 하는 구간은 말하기 어려울 정도(힘듦 10점 중 8점)입니다.</p><ol class="steps"><li>준비 5분: 빠르게 걷기나 제자리걷기</li><li>본운동 12분: 30초 세게, 60초 쉬기를 8번</li><li>정리 3분: 천천히 걷고 스트레칭</li></ol>'+ul(['실내: 빠른 스쿼트, 제자리 뛰기, 버피, 마운틴 클라이머','무릎이 부담되면: 점프 없는 스쿼트, 무릎 높이 들며 빠르게 제자리걷기, 계단 오르기','야외나 헬스장: 30초 전력 걷기나 달리기, 오르막길, 실내자전거','익숙해지면 세게 하는 시간을 40초로, 쉬는 시간을 40초로, 반복을 10번으로. 한 번에 하나씩만 늘리세요.','이틀 연속 하지 말고, 다음 날은 걷기 같은 가벼운 활동을 하세요.','가슴 통증, 심한 어지러움, 숨이 가라앉지 않으면 바로 멈추세요.'])+'</div></details>';
   h+=sec('몸에 나타날 수 있는 변화',ul(['두통, 무력감, 짜증, 집중력 저하: 탄수화물 금단 증상입니다. 보통 2~3일이면 사라지고, 계속되면 전문의와 상담하세요.','일어설 때 어지러움: 첫 주에 수분이 빠지며 생길 수 있습니다.','변비: 물을 더 마시고 유산균, 플레인 요거트를 활용하세요. 설사가 생기는 경우도 있습니다.','당뇨약을 복용 중이면 처방 의사와 상의하기 전에는 단식하면 안 됩니다. 혈압약 등 다른 약을 먹는다면 먼저 확인하세요.','4주가 지나 주 3회 단식을 이어가려면 전문가와 상담하세요.']));
   h+='<section class="panel stack"><h2>시작일과 식사 시간</h2><div class="grid2"><label class="f" for="set-start" style="grid-column:1/-1">시작일<input type="date" id="set-start" data-set="start" value="'+esc(S.start)+'"></label><label class="f" for="set-first">아침<input type="time" id="set-first" data-time="first" value="'+t.first+'"></label><label class="f" for="set-lunch">점심<input type="time" id="set-lunch" data-time="lunch" value="'+t.lunch+'"></label><label class="f" for="set-snack">간식<input type="time" id="set-snack" data-time="snack" value="'+t.snack+'"></label><label class="f" for="set-dinner">저녁<input type="time" id="set-dinner" data-time="dinner" value="'+t.dinner+'"></label></div><p class="small" id="gapText">'+gapText()+'</p></section>';
   var bk=JSON.stringify(S),good=function(x){return x===false?'문제 있음':x===true?'정상':'확인 전';};
@@ -892,6 +922,8 @@ document.addEventListener('click',function(e){
   else if(a==='ibDel'){var key='ib'+val;if(armed===key){S.inbody=S.inbody.filter(function(r){return r.cp!==+val;});armed=null;ibForm=null;save();render();toast('삭제했습니다');}else{armed=key;render();}}
   else if(a==='apply'||a==='wkmode'){var w=+b.dataset.w;setWeekMode(w,+val);if(a==='wkmode')closeSheet();render();toast(weekToast(w));}
   else if(a==='week'){openWeek(+val);}
+  else if(a==='ex'){var le=touch(v);le.ex=le.ex||{};le.ex.t=le.ex.t===b.dataset.s?'':b.dataset.s;save();render();if(le.ex.t==='hiit')toast('인터벌 운동을 기록했습니다');}
+  else if(a==='exHow'){tab='guide';render();var g=document.getElementById('exguide');if(g){g.open=true;g.scrollIntoView();}}
   else if(a==='copy'){var out=document.getElementById('bkOut'),done=function(){S.backupAt=now().toISOString();save();toast('복사했습니다. 메모 앱에 붙여넣으세요');};
     var fb=function(){out.focus();out.select();out.setSelectionRange(0,out.value.length);var ok=false;try{ok=document.execCommand('copy');}catch(x){}if(ok)done();else toast('아래 내용을 길게 눌러 복사하세요');};
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(out.value).then(done,fb);else fb();}
@@ -905,6 +937,7 @@ document.addEventListener('input',function(e){
   var t=e.target,v=curView();
   if(t.dataset.note){var l=touch(v);l.meals=l.meals||{};var r=l.meals[t.dataset.note]||(l.meals[t.dataset.note]={});r.note=t.value;save();}
   else if(t.dataset.extra){touch(v).extra=t.value;save();}
+  else if(t.dataset.exmin||t.dataset.exnote){var le2=touch(v);le2.ex=le2.ex||{};if(t.dataset.exmin)le2.ex.min=t.value.replace(/[^0-9]/g,'');else le2.ex.note=t.value;save();}
   else if(t.dataset.set==='start'&&t.value){S.start=t.value;viewDate=null;save();}
   else if(t.dataset.time&&t.value){S.times[t.dataset.time]=t.value;save();var g=document.getElementById('gapText');if(g)g.textContent=gapText();}
 });
@@ -923,7 +956,7 @@ document.addEventListener('visibilitychange',function(){if(document.hidden){if(r
 window.addEventListener('pagehide',function(){if(ready)save(true);});
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
 
-window.__app={setWeekMode:setWeekMode,fastClock:fastClock,tickFast:tickFast,analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
+window.__app={exWeek:exWeek,setWeekMode:setWeekMode,fastClock:fastClock,tickFast:tickFast,analyze:analyze,buildReport:buildReport,shareFiles:function(){return shareFiles;},ready:function(){return ready;},plan:plan,verdict:verdict,isFast:isFast,modeOf:modeOf,fastList:fastList,dayNum:dayNum,nextMonday:nextMonday,get S(){return S;},set S(x){S=x;},render:render,adherence:adherence};
 var ready=false;
 function boot(){
   var wait=new Promise(function(res){setTimeout(function(){res(undefined);},1000);});
